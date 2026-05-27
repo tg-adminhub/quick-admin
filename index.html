@@ -2729,14 +2729,28 @@ async function approveP(id, skipConfirm){
   try{
     const approvedAt = new Date();
     // ★ 처리자 기록 (감사 로그)
-    const updatePayload={
+    const fullPayload={
       status:'approved',
       approved_amount:p.amount,
       processed_at:approvedAt.toISOString(),
       processed_by_admin_id:curAcc?curAcc.id:null,
       processed_by_name:curAcc?(curAcc.name+' (@'+curAcc.username+')'):'unknown'
     };
-    const {error:pe}=await sb.from('payment_requests').update(updatePayload).eq('id',id);
+    var {error:pe}=await sb.from('payment_requests').update(fullPayload).eq('id',id);
+    // ★ DB 컬럼 미존재 시 fallback — 처리자 컬럼 빼고 재시도
+    if(pe && /processed_by_admin_id|processed_by_name|schema cache/i.test(pe.message||'')){
+      console.warn('[approveP] 처리자 컬럼 없음 → fallback (감사 로그 미적용)');
+      const minimalPayload={
+        status:'approved',
+        approved_amount:p.amount,
+        processed_at:approvedAt.toISOString()
+      };
+      var retry=await sb.from('payment_requests').update(minimalPayload).eq('id',id);
+      pe=retry.error;
+      if(!pe && !skipConfirm){
+        showToast('승인 완료 (단 처리자 기록 미적용 — Supabase 에 컬럼 추가 필요)','warning');
+      }
+    }
     if(pe)throw pe;
     
     // ★ 회원 만료일 = 승인 날짜 + 40일
@@ -2766,15 +2780,28 @@ async function rejectP(id, presetNote, skipConfirm){
   var note=skipConfirm?(presetNote||'관리자 거절'):prompt('거절 사유:','');
   if(note===null && !skipConfirm)return;
   try{
-    // ★ 처리자 기록
-    const updatePayload={
+    const fullPayload={
       status:'rejected',
       admin_note:note||'관리자 거절',
       processed_at:new Date().toISOString(),
       processed_by_admin_id:curAcc?curAcc.id:null,
       processed_by_name:curAcc?(curAcc.name+' (@'+curAcc.username+')'):'unknown'
     };
-    const {error}=await sb.from('payment_requests').update(updatePayload).eq('id',id);
+    var {error}=await sb.from('payment_requests').update(fullPayload).eq('id',id);
+    // ★ fallback
+    if(error && /processed_by_admin_id|processed_by_name|schema cache/i.test(error.message||'')){
+      console.warn('[rejectP] 처리자 컬럼 없음 → fallback');
+      const minimalPayload={
+        status:'rejected',
+        admin_note:note||'관리자 거절',
+        processed_at:new Date().toISOString()
+      };
+      var retry=await sb.from('payment_requests').update(minimalPayload).eq('id',id);
+      error=retry.error;
+      if(!error && !skipConfirm){
+        showToast('거절 완료 (단 처리자 기록 미적용 — Supabase 에 컬럼 추가 필요)','warning');
+      }
+    }
     if(error)throw error;
     if(!skipConfirm){
       showToast('결제 거절 완료','success');
