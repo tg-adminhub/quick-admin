@@ -377,6 +377,25 @@ tr:last-child td{border-bottom:none}tr:hover td{background:rgba(255,255,255,.015
   </div>
 </div>
 
+<!-- EDIT ADMIN ACCOUNT MODAL — 어드민 계정 수정 -->
+<div class="modal-bg" id="modal-edit-account">
+  <div class="modal-box">
+    <div class="mh"><div class="mt">어드민 계정 수정</div><button class="mc" onclick="closeModal('modal-edit-account')">×</button></div>
+    <input type="hidden" id="ea-id" value="">
+    <div class="alert a-blue">📝 이름, 아이디, 비밀번호를 변경할 수 있습니다 (비밀번호 비워두면 변경 안 됨)</div>
+    <div class="fg"><label class="fl">이름 *</label><input class="fi2" id="ea-name" placeholder="담당자 이름"></div>
+    <div class="fg"><label class="fl">🆔 아이디 * <span style="color:var(--text3);font-size:10px;font-weight:400">(영문/숫자/언더바, 4자 이상)</span></label>
+      <input class="fi2" id="ea-username" placeholder="아이디"></div>
+    <div class="fg"><label class="fl">🔐 새 비밀번호 <span style="color:var(--text3);font-size:10px;font-weight:400">(비워두면 변경 안 함)</span></label>
+      <input class="fi2" id="ea-password" type="text" placeholder="6자 이상" autocomplete="new-password">
+      <div style="color:var(--text3);font-size:10px;margin-top:4px">⚠ 변경 후 본인 계정이면 다시 로그인 필요</div></div>
+    <div style="display:flex;gap:8px;margin-top:14px">
+      <button class="btn btn-g" style="flex:1" onclick="closeModal('modal-edit-account')">취소</button>
+      <button class="btn btn-p" style="flex:1" onclick="saveEditAccount()">💾 저장</button>
+    </div>
+  </div>
+</div>
+
 <!-- EDIT ORG MODAL — 조직 정보 수정 -->
 <div class="modal-bg" id="modal-edit-org">
   <div class="modal-box">
@@ -1181,6 +1200,12 @@ function showMember(id){
     +'<div class="fg"><label class="fl">이름</label><input class="fi2" id="mem-name" value="'+(m.name||'').replace(/"/g,'&quot;')+'"></div>'
     +'<div class="fg"><label class="fl">🆔 아이디 <span style="color:var(--text3);font-size:10px;font-weight:400">(변경 시 회원에게 새 아이디 전달 필요)</span></label>'
     +'<input class="fi2" id="mem-username" value="'+m.username+'" placeholder="영문/숫자/언더바 4자 이상" data-original="'+m.username+'"></div>'
+    // 비밀번호 변경 (아이디 바로 밑으로 이동)
+    +'<div class="fg" style="background:var(--bg3);border-radius:7px;padding:12px">'
+    +'<label class="fl">🔐 비밀번호 변경 <span style="color:var(--text3);font-size:10px;font-weight:400">(비워두면 변경 안 함)</span></label>'
+    +'<input class="fi2" id="mem-newpw" type="text" value="" placeholder="새 비밀번호 (6자 이상) — 입력 시에만 변경됨" autocomplete="new-password">'
+    +'<div style="color:var(--text3);font-size:10px;margin-top:4px">⚠ 변경 후 회원에게 새 비번을 직접 전달하세요</div>'
+    +'</div>'
     // 사용 앱 라디오
     +'<div class="fg"><label class="fl">📱 사용 앱</label>'
     +'<div style="display:flex;gap:8px">'
@@ -1219,12 +1244,6 @@ function showMember(id){
     // 어드민 메모
     +'<div class="fg"><label class="fl">📝 어드민 메모 <span style="color:var(--text3);font-size:10px;font-weight:400">(어드민만 볼 수 있음, 회원에겐 노출 안 됨)</span></label>'
     +'<textarea class="fi2" id="mem-memo" rows="3" placeholder="이 회원에 대한 메모를 자유롭게 적어주세요. 예: 신원확인 완료, 특이사항 등">'+(m.memo||'').replace(/</g,'&lt;')+'</textarea></div>'
-    // 비밀번호 변경 (관리자 직접 변경)
-    +'<div class="fg" style="background:var(--bg3);border-radius:7px;padding:12px;margin-top:10px">'
-    +'<label class="fl">🔐 비밀번호 변경 <span style="color:var(--text3);font-size:10px;font-weight:400">(비워두면 변경 안 함)</span></label>'
-    +'<input class="fi2" id="mem-newpw" type="text" value="" placeholder="새 비밀번호 (6자 이상) — 입력 시에만 변경됨" autocomplete="new-password">'
-    +'<div style="color:var(--text3);font-size:10px;margin-top:4px">⚠ 변경 후 회원에게 새 비번을 직접 전달하세요</div>'
-    +'</div>'
     // 액션 버튼
     +'<div style="display:flex;gap:8px;margin-top:14px">'
     +'<button class="btn btn-g" style="flex:1" onclick="closeModal(\'modal-member\')">닫기</button>'
@@ -2540,103 +2559,79 @@ function openAddMember(){
   });
   document.getElementById('am-app').value='toss';
   
-  // ★ 단계별 소속 — 권한별 자동 처리 (2026.05.27)
-  var vis=getVisibleBranchIds();
-  var visBranches=vis===null?branches:branches.filter(b=>vis.indexOf(b.id)>=0);
-  var subBranches=visBranches.filter(b=>b.type==='sub');
-  if(subBranches.length===0){
-    showToast('등록된 지점이 없습니다 — 먼저 지점 관리에서 추가해주세요','error');return;
-  }
-  
+  // ★ 단계별 select 숨김 — 평면 select 한 개로 통합 (2026.05.27)
+  //   이전: 총판 → 지사 → 지점 3단계 → 산하 조직 없으면 모달 안 열림
+  //   변경: 자기 권한 내 모든 조직 (총판/지사/지점) 한 select 에 계층 표시
+  //         → 산하 조직 없어도 본인 총판/지사 자체에 회원 가입 가능
   var masterWrap=document.getElementById('am-master-wrap');
   var branchWrap=document.getElementById('am-branch-wrap');
-  var masterSel=document.getElementById('am-master');
-  var branchSel=document.getElementById('am-branch-sel');
-  var subSel=document.getElementById('am-branch');
+  if(masterWrap)masterWrap.style.display='none';
+  if(branchWrap)branchWrap.style.display='none';
   
-  // 권한별 표시
-  if(role==='dev'){
-    // 개발자: 총판 → 지사 → 지점 모두 선택
-    masterWrap.style.display='block';
-    branchWrap.style.display='none';  // 총판 선택 후 표시
-    var masters=branches.filter(b=>b.type==='master');
-    masterSel.innerHTML='<option value="">총판 선택...</option>'+
-      masters.map(b=>'<option value="'+b.id+'">🏢 '+b.name+'</option>').join('');
-    subSel.innerHTML='<option value="">먼저 총판 → 지사를 선택하세요</option>';
-  }else if(role==='master'){
-    // 총판: 본인 총판 고정, 지사 → 지점 선택
-    masterWrap.style.display='none';
-    branchWrap.style.display='block';
-    var myMaster=visBranches.find(b=>b.type==='master');
-    masterSel.value=myMaster?myMaster.id:'';
-    // 본인 산하 지사들
-    var myBranches=visBranches.filter(b=>b.type==='branch'&&b.parent_id===(myMaster?myMaster.id:null));
-    branchSel.innerHTML='<option value="">지사 선택...</option>'+
-      myBranches.map(b=>'<option value="'+b.id+'">🏬 '+b.name+'</option>').join('');
-    subSel.innerHTML='<option value="">먼저 지사를 선택하세요</option>';
-  }else if(role==='branch'){
-    // 지사: 본인 지사 고정, 지점만 선택
-    masterWrap.style.display='none';
-    branchWrap.style.display='none';
-    var myBranch=visBranches.find(b=>b.type==='branch');
-    var mySubs=subBranches.filter(b=>b.parent_id===(myBranch?myBranch.id:null));
-    subSel.innerHTML='<option value="">지점 선택...</option>'+
-      mySubs.map(b=>'<option value="'+b.id+'">📍 '+b.name+'</option>').join('');
-  }else{
-    // 지점 시점: 본인 지점만
-    masterWrap.style.display='none';
-    branchWrap.style.display='none';
-    subSel.innerHTML='<option value="">지점 선택...</option>'+
-      subBranches.map(b=>'<option value="'+b.id+'">📍 '+b.name+'</option>').join('');
+  var vis=getVisibleBranchIds();
+  var visBranches=vis===null?branches:branches.filter(b=>vis.indexOf(b.id)>=0);
+  
+  if(visBranches.length===0){
+    showToast('등록된 조직이 없습니다 — 먼저 지사/지점 관리에서 추가해주세요','error');return;
   }
   
+  var subSel=document.getElementById('am-branch');
+  var opts='<option value="">소속 조직 선택...</option>';
+  
+  if(role==='dev'){
+    // 개발자 — 모든 총판 → 지사 → 지점 계층 표시
+    var masters=visBranches.filter(b=>b.type==='master');
+    masters.forEach(m=>{
+      opts+='<option value="'+m.id+'">🏢 '+m.name+'</option>';
+      visBranches.filter(b=>b.type==='branch'&&b.parent_id===m.id).forEach(br=>{
+        opts+='<option value="'+br.id+'"> └ 🏬 '+br.name+'</option>';
+        visBranches.filter(b=>b.type==='sub'&&b.parent_id===br.id).forEach(s=>{
+          opts+='<option value="'+s.id+'">     └ 📍 '+s.name+'</option>';
+        });
+      });
+      visBranches.filter(b=>b.type==='sub'&&b.parent_id===m.id).forEach(s=>{
+        opts+='<option value="'+s.id+'"> └ 📍 '+s.name+' (직속)</option>';
+      });
+    });
+  }else if(role==='master'){
+    // 총판 — 본인 총판 + 산하 모든 조직
+    var myMaster=visBranches.find(b=>b.type==='master');
+    if(myMaster){
+      opts+='<option value="'+myMaster.id+'">🏢 '+myMaster.name+' (총판 직속)</option>';
+      visBranches.filter(b=>b.type==='branch'&&b.parent_id===myMaster.id).forEach(br=>{
+        opts+='<option value="'+br.id+'"> └ 🏬 '+br.name+'</option>';
+        visBranches.filter(b=>b.type==='sub'&&b.parent_id===br.id).forEach(s=>{
+          opts+='<option value="'+s.id+'">     └ 📍 '+s.name+'</option>';
+        });
+      });
+      visBranches.filter(b=>b.type==='sub'&&b.parent_id===myMaster.id).forEach(s=>{
+        opts+='<option value="'+s.id+'"> └ 📍 '+s.name+' (총판 직속)</option>';
+      });
+    }
+  }else if(role==='branch'){
+    // 지사 — 본인 지사 + 산하 지점
+    var myBranch=visBranches.find(b=>b.type==='branch');
+    if(myBranch){
+      opts+='<option value="'+myBranch.id+'">🏬 '+myBranch.name+' (지사 직속)</option>';
+      visBranches.filter(b=>b.type==='sub'&&b.parent_id===myBranch.id).forEach(s=>{
+        opts+='<option value="'+s.id+'"> └ 📍 '+s.name+'</option>';
+      });
+    }
+  }else if(role==='sub'){
+    // 지점 — 본인 지점만
+    var mySub=visBranches.find(b=>b.type==='sub');
+    if(mySub){
+      opts='<option value="'+mySub.id+'" selected>📍 '+mySub.name+'</option>';
+    }
+  }
+  
+  subSel.innerHTML=opts;
   openModalHelper('modal-add-member');
 }
 
-// ★ 총판 변경 — 해당 총판 산하 지사들로 채움
-function onAddMemberMasterChange(){
-  var mid=parseInt(document.getElementById('am-master').value);
-  var branchWrap=document.getElementById('am-branch-wrap');
-  var branchSel=document.getElementById('am-branch-sel');
-  var subSel=document.getElementById('am-branch');
-  if(!mid){
-    branchWrap.style.display='none';
-    subSel.innerHTML='<option value="">먼저 총판 → 지사를 선택하세요</option>';
-    return;
-  }
-  branchWrap.style.display='block';
-  var myBranches=branches.filter(b=>b.type==='branch'&&b.parent_id===mid);
-  branchSel.innerHTML='<option value="">지사 선택...</option>'+
-    myBranches.map(b=>'<option value="'+b.id+'">🏬 '+b.name+'</option>').join('');
-  // 직속 지점 (총판 바로 산하)
-  var directSubs=branches.filter(b=>b.type==='sub'&&b.parent_id===mid);
-  if(directSubs.length>0){
-    branchSel.innerHTML+='<option value="direct">— 직속 지점 사용 —</option>';
-  }
-  subSel.innerHTML='<option value="">먼저 지사를 선택하세요</option>';
-}
-
-// ★ 지사 변경 — 해당 지사 산하 지점들로 채움
-function onAddMemberBranchChange(){
-  var bid=document.getElementById('am-branch-sel').value;
-  var subSel=document.getElementById('am-branch');
-  if(!bid){
-    subSel.innerHTML='<option value="">먼저 지사를 선택하세요</option>';
-    return;
-  }
-  if(bid==='direct'){
-    // 총판 직속 지점
-    var mid=parseInt(document.getElementById('am-master').value);
-    var directSubs=branches.filter(b=>b.type==='sub'&&b.parent_id===mid);
-    subSel.innerHTML='<option value="">지점 선택...</option>'+
-      directSubs.map(b=>'<option value="'+b.id+'">📍 '+b.name+' (직속)</option>').join('');
-  }else{
-    var parentBid=parseInt(bid);
-    var mySubs=branches.filter(b=>b.type==='sub'&&b.parent_id===parentBid);
-    subSel.innerHTML='<option value="">지점 선택...</option>'+
-      mySubs.map(b=>'<option value="'+b.id+'">📍 '+b.name+'</option>').join('');
-  }
-}
+// ★ 호환용 stub (이전 단계별 핸들러)
+function onAddMemberMasterChange(){}
+function onAddMemberBranchChange(){}
 
 // 헬퍼 - 모달 열기
 function openModalHelper(id){document.getElementById(id).classList.add('open');}
@@ -2937,7 +2932,13 @@ async function loadAccounts(){
       +'<td><span class="badge '+(rcCol[a.role]||'bg-gray')+'">'+(rl[a.role]||a.role||'-')+'</span></td>'
       +'<td style="font-size:11px;color:var(--text2)">'+branchName+'</td>'
       +'<td style="font-size:11px;color:var(--text2)">'+isoToFd(a.created_at)+'</td>'
-      +'<td>'+(role==='dev'&&!isMe&&a.role!=='dev'?'<button class="btn btn-d btn-sm" onclick="deleteAccount('+a.id+',\''+a.username+'\')">삭제</button>':'<span style="font-size:10px;color:var(--text3)">—</span>')+'</td>'
+      +'<td><div style="display:flex;gap:4px;flex-wrap:wrap">'
+      // 수정 권한: 개발자 = 모두 / 본인 = 자기 자신
+      +((role==='dev'||isMe)?'<button class="btn btn-g btn-sm" onclick="openEditAccount('+a.id+')">✏️ 수정</button>':'')
+      // 삭제 권한: 개발자 + 본인 제외 + dev 역할 제외
+      +(role==='dev'&&!isMe&&a.role!=='dev'?'<button class="btn btn-d btn-sm" onclick="deleteAccount('+a.id+',\''+a.username+'\')">삭제</button>':'')
+      +((role!=='dev'&&!isMe)?'<span style="font-size:10px;color:var(--text3)">—</span>':'')
+      +'</div></td>'
       +'</tr>';
     });
     html+='</tbody></table></div>';
@@ -2956,6 +2957,103 @@ async function deleteAccount(id,username){
     navigate('accounts');
   }catch(e){
     showToast('삭제 실패: '+e.message,'error');
+  }
+}
+
+// ★ 어드민 계정 수정 모달 열기 (2026.05.27)
+async function openEditAccount(id){
+  try{
+    const {data,error}=await sb.from('admins').select('*').eq('id',id).maybeSingle();
+    if(error||!data){showToast('계정을 찾을 수 없습니다','error');return;}
+    
+    // 권한 체크
+    var isMe=(curAcc&&curAcc.id===id);
+    if(role!=='dev'&&!isMe){
+      showToast('수정 권한이 없습니다','error');return;
+    }
+    
+    document.getElementById('ea-id').value=id;
+    document.getElementById('ea-name').value=data.name||'';
+    document.getElementById('ea-username').value=data.username||'';
+    document.getElementById('ea-password').value='';
+    // 기존 값 data-original 로 저장 (변경 감지용)
+    document.getElementById('ea-username').setAttribute('data-original',data.username||'');
+    
+    document.getElementById('modal-edit-account').classList.add('open');
+  }catch(e){
+    showToast('로드 실패: '+e.message,'error');
+  }
+}
+
+// ★ 어드민 계정 수정 저장
+async function saveEditAccount(){
+  var id=parseInt(document.getElementById('ea-id').value);
+  var name=document.getElementById('ea-name').value.trim();
+  var username=document.getElementById('ea-username').value.trim();
+  var newPw=document.getElementById('ea-password').value;
+  var originalUsername=document.getElementById('ea-username').getAttribute('data-original');
+  
+  if(!name){showToast('이름은 필수입니다','error');return;}
+  if(!username){showToast('아이디는 필수입니다','error');return;}
+  if(!/^[a-zA-Z0-9_]+$/.test(username)){showToast('아이디는 영문/숫자/언더바만 사용 가능','error');return;}
+  if(username.length<4){showToast('아이디는 4자 이상이어야 합니다','error');return;}
+  
+  // 아이디 변경 시 중복 체크
+  var usernameChanged=(username!==originalUsername);
+  if(usernameChanged){
+    try{
+      const {data:existing}=await sb.from('admins').select('id').eq('username',username).neq('id',id).maybeSingle();
+      if(existing){showToast('이미 사용 중인 아이디입니다','error');return;}
+    }catch(e){showToast('중복 확인 실패: '+e.message,'error');return;}
+  }
+  
+  // 비밀번호 변경 시 검증
+  if(newPw && newPw.length>0){
+    if(newPw.length<6){showToast('비밀번호는 6자 이상이어야 합니다','error');return;}
+  }
+  
+  // 본인 계정 변경 시 안내
+  var isMe=(curAcc&&curAcc.id===id);
+  if(isMe&&(usernameChanged||newPw)){
+    if(!confirm('본인 계정의 '+
+      (usernameChanged?'아이디':'')+
+      (usernameChanged&&newPw?' + ':'')+
+      (newPw?'비밀번호':'')+
+      ' 를 변경합니다.\n\n저장 후 즉시 다시 로그인이 필요합니다. 진행하시겠습니까?'))return;
+  }
+  
+  try{
+    const updatePayload={
+      name:name,
+      username:username,
+      updated_at:new Date().toISOString()
+    };
+    if(newPw && newPw.length>=6){
+      updatePayload.password=await sha256(newPw);
+    }
+    
+    const {error}=await sb.from('admins').update(updatePayload).eq('id',id);
+    if(error)throw error;
+    
+    var msg='계정 수정 완료';
+    if(usernameChanged)msg+=' (아이디: @'+username+')';
+    if(newPw)msg+=' (비밀번호 변경됨)';
+    showToast(msg,'success');
+    closeModal('modal-edit-account');
+    
+    // 본인 계정 + 아이디/비번 변경 시 — 강제 로그아웃
+    if(isMe&&(usernameChanged||newPw)){
+      setTimeout(()=>{
+        showToast('변경된 정보로 다시 로그인 해주세요','info');
+        // localStorage 정리 후 로그인 화면으로
+        localStorage.removeItem('curAcc');
+        setTimeout(()=>location.reload(),1000);
+      },1500);
+    }else{
+      navigate('accounts');
+    }
+  }catch(e){
+    showToast('저장 실패: '+e.message,'error');
   }
 }
 
