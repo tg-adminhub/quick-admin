@@ -13,6 +13,7 @@
 <link rel="apple-touch-icon" href="data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 192 192'><rect width='192' height='192' rx='32' fill='%23f0b429'/><text x='96' y='130' font-family='Arial Black,sans-serif' font-size='110' font-weight='900' fill='%23000' text-anchor='middle'>Q</text></svg>">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.0/chart.umd.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Pretendard:wght@400;500;600;700&display=swap');
 *{margin:0;padding:0;box-sizing:border-box}
@@ -536,6 +537,11 @@ function isSuperDev(){
   return curAcc && curAcc.username === SUPER_DEV_USERNAME;
 }
 var selPay=new Set(), memberFilter='all', payFilter='all';
+// ★ 결제 검색/필터 (2026.05.27)
+var paySearch='';
+var payDateFrom=null;
+var payDateTo=null;
+var selPayBulk=new Set();  // 일괄 처리용 선택된 결제 id
 var pendType=null, pendParent=null;
 var BASE_FEE=60000, DEV_FEE=40000;
 var chartObj=null, payChartObj=null;
@@ -885,15 +891,18 @@ async function loadAllData(){
       name:p.users?p.users.real_name:'-',
       username:p.users?p.users.username:'-',
       phone:p.users?p.users.phone:'-',
-      branch_id:p.users?p.users.branch_id:null,  // ★ 권한 격리에 필요
-      platform:p.users?(p.users.app_type||'toss'):'toss',  // ★ 사용 앱
+      branch_id:p.users?p.users.branch_id:null,
+      platform:p.users?(p.users.app_type||'toss'):'toss',
       appType:p.users?(p.users.app_type||'toss'):'toss',
       amount:p.amount,
       date:isoToFd(p.created_at),
+      createdAt:p.created_at,  // ★ 날짜 필터용 ISO
       processedAt:p.processed_at,
       status:p.status||'pending',
-      note:p.note,
+      note:p.note,  // ★ 입금자명 (회원이 신청 시 입력)
       adminNote:p.admin_note,
+      processedByAdminId:p.processed_by_admin_id,  // ★ 보안 - 처리한 어드민 ID
+      processedByName:p.processed_by_name,  // ★ 보안 - 처리한 어드민 이름
       orgType:'sub',orgId:'manual'
     }));
     
@@ -2190,8 +2199,38 @@ function renderPayment(){
     if(p.branch_id==null)return false;
     return vis.indexOf(p.branch_id)>=0&&paymentMatchesPlatform(p);
   });
-  var list=visPayments.filter(function(p){return payFilter==='all'||p.status===payFilter;});
-  var pend=visPayments.filter(function(p){return p.status==='pending';}).length;
+  
+  // 상태별 카운트 (필터 영향 안 받음 — 카드 표시용)
+  var pendCnt=visPayments.filter(function(p){return p.status==='pending';}).length;
+  var apprCnt=visPayments.filter(function(p){return p.status==='approved';}).length;
+  var rejCnt=visPayments.filter(function(p){return p.status==='rejected';}).length;
+  
+  // 필터링 (상태 + 검색 + 날짜)
+  var list=visPayments.filter(function(p){
+    // 상태
+    if(payFilter!=='all' && p.status!==payFilter)return false;
+    // 검색
+    if(paySearch){
+      var s=paySearch.toLowerCase();
+      var matchName=(p.name||'').toLowerCase().indexOf(s)>=0;
+      var matchUname=(p.username||'').toLowerCase().indexOf(s)>=0;
+      var matchNote=(p.note||'').toLowerCase().indexOf(s)>=0;
+      var matchPhone=(p.phone||'').toLowerCase().indexOf(s)>=0;
+      if(!matchName&&!matchUname&&!matchNote&&!matchPhone)return false;
+    }
+    // 날짜
+    if(payDateFrom){
+      var fromD=new Date(payDateFrom);fromD.setHours(0,0,0,0);
+      var pD=p.createdAt?new Date(p.createdAt):pd(p.date);
+      if(!pD||pD<fromD)return false;
+    }
+    if(payDateTo){
+      var toD=new Date(payDateTo);toD.setHours(23,59,59,999);
+      var pD2=p.createdAt?new Date(p.createdAt):pd(p.date);
+      if(!pD2||pD2>toD)return false;
+    }
+    return true;
+  });
   
   // ★ 최근 30일 매출 (승인된 것만)
   var monthAgo=lastNDaysStart(30);
@@ -2200,8 +2239,6 @@ function renderPayment(){
     var d=pd(p.date);
     return d&&d>=monthAgo;
   }).reduce((sum,p)=>sum+(p.amount||0),0);
-  
-  // 누적 매출 (전체 승인분)
   var totalRev=visPayments.filter(p=>p.status==='approved').reduce((sum,p)=>sum+(p.amount||0),0);
   
   // 일별 매출 (최근 30일)
@@ -2217,24 +2254,29 @@ function renderPayment(){
     if(dayRev.hasOwnProperty(key))dayRev[key]+=(p.amount||0);
   });
   
-  var html='<div class="ph"><div><h1>결제 관리</h1><p>최근 30일 매출 + 일별 추이</p></div><div><button class="btn btn-g" onclick="loadAllData().then(()=>{navigate(\'payment\');showToast(\'새로고침 완료\',\'success\');})">🔄 새로고침</button></div></div>'
-  +'<div class="sgrid sg4">'
-  +'<div class="scard"><div class="scard-top"><div class="slabel">대기</div><div class="sicon" style="background:rgba(240,180,41,.12);color:var(--accent)">⏳</div></div><div class="sval" style="color:var(--accent)">'+pend+'</div></div>'
-  +'<div class="scard"><div class="scard-top"><div class="slabel">승인</div><div class="sicon" style="background:rgba(39,174,96,.12);color:var(--green)">✓</div></div><div class="sval" style="color:var(--green)">'+visPayments.filter(function(p){return p.status==='approved';}).length+'</div></div>'
-  +'<div class="scard"><div class="scard-top"><div class="slabel">거절</div><div class="sicon" style="background:rgba(231,76,60,.12);color:var(--red)">✗</div></div><div class="sval">'+visPayments.filter(function(p){return p.status==='rejected';}).length+'</div></div>'
-  +'<div class="scard" style="border-top:2px solid var(--accent)"><div class="scard-top"><div class="slabel">최근 30일 매출</div><div class="sicon" style="background:rgba(240,180,41,.12);color:var(--accent)">📅</div></div><div class="sval" style="color:var(--accent)">₩'+monthRev.toLocaleString()+'</div><div class="ssub">누적 ₩'+totalRev.toLocaleString()+'</div></div>'
-  +'</div>';
+  var html='<div class="ph"><div><h1>결제 관리</h1><p>실시간 동기화 — 총 '+visPayments.length+'건 (필터 적용: '+list.length+'건)</p></div>'
+    +'<div style="display:flex;gap:6px;flex-wrap:wrap">'
+    +(role==='dev'?'<button class="btn btn-p btn-sm" onclick="exportPaymentExcel()">📊 엑셀 다운로드</button>':'')
+    +'<button class="btn btn-g btn-sm" onclick="loadAllData().then(()=>{navigate(\'payment\');showToast(\'새로고침 완료\',\'success\');})">🔄 새로고침</button>'
+    +'</div></div>';
   
-  // 일별 매출 — 차트 + 카드 형식 (둘 다)
-  var sortedDays=Object.keys(dayRev).sort().reverse(); // 최신순
+  // ★ 카드 — 클릭 가능하게 + 활성 표시
+  var activeCard=(payFilter==='all'?'all':payFilter);
+  html += '<div class="sgrid sg4">'
+    +'<div class="scard" style="cursor:pointer'+(activeCard==='pending'?';border:2px solid var(--accent)':'')+'" onclick="setPF(\'pending\')"><div class="scard-top"><div class="slabel">대기</div><div class="sicon" style="background:rgba(240,180,41,.12);color:var(--accent)">⏳</div></div><div class="sval" style="color:var(--accent)">'+pendCnt+'</div></div>'
+    +'<div class="scard" style="cursor:pointer'+(activeCard==='approved'?';border:2px solid var(--green)':'')+'" onclick="setPF(\'approved\')"><div class="scard-top"><div class="slabel">승인</div><div class="sicon" style="background:rgba(39,174,96,.12);color:var(--green)">✓</div></div><div class="sval" style="color:var(--green)">'+apprCnt+'</div></div>'
+    +'<div class="scard" style="cursor:pointer'+(activeCard==='rejected'?';border:2px solid var(--red)':'')+'" onclick="setPF(\'rejected\')"><div class="scard-top"><div class="slabel">거절</div><div class="sicon" style="background:rgba(231,76,60,.12);color:var(--red)">✗</div></div><div class="sval">'+rejCnt+'</div></div>'
+    +'<div class="scard" style="border-top:2px solid var(--accent)"><div class="scard-top"><div class="slabel">최근 30일 매출</div><div class="sicon" style="background:rgba(240,180,41,.12);color:var(--accent)">📅</div></div><div class="sval" style="color:var(--accent)">₩'+monthRev.toLocaleString()+'</div><div class="ssub">누적 ₩'+totalRev.toLocaleString()+'</div></div>'
+    +'</div>';
+  
+  // 일별 매출 차트
+  var sortedDays=Object.keys(dayRev).sort().reverse();
   var hasAnyRev=sortedDays.some(k=>dayRev[k]>0);
   
   html+='<div class="card" style="padding:14px;margin-bottom:12px"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px"><div class="card-title">📅 일별 매출 — 최근 30일</div><span style="font-size:11px;color:var(--text2)">승인된 결제만 집계</span></div>';
-  
   if(!hasAnyRev){
     html+='<div class="empty" style="padding:20px"><div style="font-size:24px;opacity:.3">📊</div><div style="font-size:12px;color:var(--text3);margin-top:6px">최근 30일 동안 승인된 결제가 없습니다</div></div>';
   } else {
-    // 일별 카드 (가로 스크롤) — 매출 있는 날만
     html+='<div style="display:flex;gap:6px;overflow-x:auto;padding:4px 0 8px;border-bottom:1px solid var(--border);margin-bottom:10px">';
     sortedDays.filter(k=>dayRev[k]>0).forEach(k=>{
       var d=new Date(k);
@@ -2246,36 +2288,384 @@ function renderPayment(){
         +'</div>';
     });
     html+='</div>';
-    // 차트
     html+='<div style="height:100px"><canvas id="payDayChart"></canvas></div>';
   }
   html+='</div>';
   
-  html+='<div class="fbar">'+['all','pending','approved','rejected'].map(function(f){
-    var cnt=visPayments.filter(p=>f==='all'||p.status===f).length;
-    return '<button class="fbtn'+(payFilter===f?' on':'')+'" onclick="setPF(\''+f+'\')">'+(f==='all'?'전체':f==='pending'?'대기':f==='approved'?'승인':'거절')+' '+cnt+'</button>';
-  }).join('')+'</div>'
-  +'<div class="card" style="padding:0"><div class="card-head" style="padding:12px 16px"><div class="card-title">입금 신청 내역</div><span style="font-size:11px;color:var(--text2)">총 '+list.length+'건</span></div>';
-  if(!list.length)html+='<div class="empty"><div class="empty-icon">💳</div><div class="empty-txt">입금 신청이 없습니다</div></div>';
-  else{
-    html+='<div class="tw"><table><thead><tr><th>기사</th><th>앱</th><th>소속</th><th>금액</th><th>신청일</th><th>처리일</th><th>상태</th><th>관리</th></tr></thead><tbody>';
+  // ★ 검색 + 날짜 필터 + 정리 버튼 박스
+  html += '<div class="card" style="padding:14px;margin-bottom:10px">'
+    +'<div style="display:flex;flex-wrap:wrap;gap:10px;align-items:center">'
+    +'<div style="flex:1;min-width:220px"><input type="text" class="fi2" id="pay-search" placeholder="🔍 회원 이름/아이디/입금자명/전화" value="'+(paySearch||'').replace(/"/g,'&quot;')+'" oninput="paySearch=this.value;rerenderPaymentDebounced()"></div>'
+    +'<div style="display:flex;gap:6px;align-items:center"><span style="font-size:11px;color:var(--text3)">📅</span><input type="date" class="fi2" style="width:140px" id="pay-from" value="'+(payDateFrom||'')+'" onchange="payDateFrom=this.value;navigate(\'payment\')"><span style="font-size:11px;color:var(--text3)">~</span><input type="date" class="fi2" style="width:140px" id="pay-to" value="'+(payDateTo||'')+'" onchange="payDateTo=this.value;navigate(\'payment\')"></div>'
+    +'<button class="btn btn-g btn-sm" onclick="clearPayFilters()">🗑 필터 초기화</button>'
+    +(role==='dev'?'<button class="btn btn-d btn-sm" onclick="cleanupOldPayments()">📦 처리완료 정리</button>':'')
+    +'</div></div>';
+  
+  // ★ 일괄 처리 액션 바 (선택된 결제 있을 때만)
+  var selectedIds=Array.from(selPayBulk).filter(id=>list.find(p=>p.id===id));
+  if(selectedIds.length>0){
+    html += '<div class="card" style="padding:12px;margin-bottom:10px;background:rgba(240,180,41,.08);border:1px solid var(--accent)">'
+      +'<div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px">'
+      +'<div style="font-size:13px;font-weight:600">✓ '+selectedIds.length+'건 선택됨</div>'
+      +'<div style="display:flex;gap:6px">'
+      +'<button class="btn btn-s btn-sm" onclick="bulkApproveP()">✓ 일괄 승인</button>'
+      +'<button class="btn btn-d btn-sm" onclick="bulkRejectP()">✗ 일괄 거절</button>'
+      +'<button class="btn btn-g btn-sm" onclick="selPayBulk.clear();navigate(\'payment\')">선택 해제</button>'
+      +'</div></div></div>';
+  }
+  
+  // 입금 신청 내역 표
+  html+='<div class="card" style="padding:0"><div class="card-head" style="padding:12px 16px"><div class="card-title">입금 신청 내역</div><span style="font-size:11px;color:var(--text2)">필터 적용: '+list.length+'건</span></div>';
+  if(!list.length){
+    html+='<div class="empty"><div class="empty-icon">💳</div><div class="empty-txt">조건에 맞는 결제 신청이 없습니다</div></div>';
+  } else {
+    var pendingInList=list.filter(p=>p.status==='pending');
+    html+='<div class="tw"><table><thead><tr>'
+      +(pendingInList.length>0?'<th style="width:30px"><input type="checkbox" class="cb" id="selAllPay" onchange="toggleSelAllPay(this.checked)"></th>':'<th style="width:30px"></th>')
+      +'<th>기사</th><th>앱</th><th>소속</th><th>금액</th><th>입금자명</th><th>신청일</th><th>처리일 / 처리자</th><th>상태</th><th>관리</th></tr></thead><tbody>';
     list.forEach(function(p){
       var c=ac(p.id);
-      html+='<tr><td><div class="minfo"><div class="mavatar" style="background:'+c+'22;color:'+c+'">'+(p.name?p.name[0]:'?')+'</div><div><div class="mname">'+p.name+'</div><div class="mid">@'+p.username+'</div></div></div></td>'
+      var isPending=(p.status==='pending');
+      var canCheck=isPending;
+      var checked=selPayBulk.has(p.id)?' checked':'';
+      // 입금자명 표시 — 본인 이름과 다르면 강조
+      var depositor=p.note||'';
+      var depositMatch=depositor && p.name && depositor.replace(/\s/g,'')===p.name.replace(/\s/g,'');
+      var depositHtml=depositor
+        ?'<div style="font-size:12px;font-weight:'+(depositMatch?'400':'700')+';color:'+(depositMatch?'var(--text)':'var(--accent)')+'">'+depositor+(depositMatch?'':' <span style="font-size:9px;background:rgba(240,180,41,.15);padding:1px 5px;border-radius:3px">⚠ 본인名 다름</span>')+'</div>'
+        :'<span style="font-size:11px;color:var(--text3)">미입력</span>';
+      // 처리자 표시
+      var procHtml=p.processedAt
+        ?'<div style="font-size:11px;color:var(--text2)">'+isoToFd(p.processedAt)+'</div>'
+          +(p.processedByName?'<div style="font-size:10px;color:var(--blue);margin-top:1px">👤 '+p.processedByName+'</div>':'')
+        :'<span style="font-size:11px;color:var(--text3)">-</span>';
+      html+='<tr>'
+      +'<td>'+(canCheck?'<input type="checkbox" class="cb" data-pay="'+p.id+'"'+checked+' onchange="togglePayCheck('+p.id+',this.checked)">':'')+'</td>'
+      +'<td><div class="minfo"><div class="mavatar" style="background:'+c+'22;color:'+c+'">'+(p.name?p.name[0]:'?')+'</div><div><div class="mname">'+p.name+'</div><div class="mid">@'+p.username+'</div></div></div></td>'
       +'<td>'+appBadge(p.appType)+'</td>'
       +'<td style="font-size:11px">'+branchPath(p.branch_id,true)+'</td>'
       +'<td style="font-weight:700;color:'+(p.status==='approved'?'var(--green)':'var(--text2)')+'">₩'+(p.amount||0).toLocaleString()+'</td>'
+      +'<td>'+depositHtml+'</td>'
       +'<td style="font-size:11px;color:var(--text2)">'+p.date+'</td>'
-      +'<td style="font-size:11px;color:var(--text3)">'+(p.processedAt?isoToFd(p.processedAt):'-')+'</td>'
+      +'<td>'+procHtml+'</td>'
       +'<td><span class="badge '+(p.status==='pending'?'bg-yellow':p.status==='approved'?'bg-green':'bg-red')+'">'+(p.status==='pending'?'대기':p.status==='approved'?'승인':'거절')+'</span></td>'
-      +'<td><div style="display:flex;gap:4px">'+(p.status==='pending'?'<button class="btn btn-s btn-sm" onclick="approveP('+p.id+')">승인</button><button class="btn btn-d btn-sm" onclick="rejectP('+p.id+')">거절</button>':'<span style="font-size:11px;color:var(--text3)">완료</span>')+'</div></td></tr>';
+      +'<td><div style="display:flex;gap:4px">'
+      +(isPending?'<button class="btn btn-s btn-sm" onclick="approveP('+p.id+')">승인</button><button class="btn btn-d btn-sm" onclick="rejectP('+p.id+')">거절</button>':'<span style="font-size:11px;color:var(--text3)">완료</span>')
+      +(role==='dev'?' <button class="btn btn-d btn-sm" onclick="deletePayment('+p.id+')" title="개발자 전용 삭제">🗑</button>':'')
+      +'</div></td></tr>';
     });
     html+='</tbody></table></div>';
   }
   
-  // 차트 그리기 (다음 tick)
   setTimeout(()=>drawPaymentChart(dayRev),100);
   return html+'</div>';
+}
+
+// ★ 결제 필터 helpers
+var _payRerenderTimer=null;
+function rerenderPaymentDebounced(){
+  clearTimeout(_payRerenderTimer);
+  _payRerenderTimer=setTimeout(()=>{
+    // 검색만 — input focus 유지 위해 카드/표만 다시 렌더링
+    document.getElementById('page-content').innerHTML=renderPayment();
+    // input focus 복원
+    var inp=document.getElementById('pay-search');
+    if(inp){inp.focus();var v=inp.value;inp.value='';inp.value=v;}
+  }, 200);
+}
+function clearPayFilters(){
+  paySearch='';payDateFrom=null;payDateTo=null;payFilter='all';selPayBulk.clear();
+  navigate('payment');
+}
+function togglePayCheck(id,checked){
+  if(checked)selPayBulk.add(id);else selPayBulk.delete(id);
+  // 일괄 처리 바만 다시 렌더링하기 위해 navigate
+  navigate('payment');
+}
+function toggleSelAllPay(checked){
+  document.querySelectorAll('input[data-pay]').forEach(cb=>{
+    cb.checked=checked;
+    var id=parseInt(cb.dataset.pay);
+    if(checked)selPayBulk.add(id);else selPayBulk.delete(id);
+  });
+  navigate('payment');
+}
+async function bulkApproveP(){
+  var ids=Array.from(selPayBulk);
+  if(ids.length===0){showToast('선택된 결제가 없습니다','error');return;}
+  if(!confirm(ids.length+'건의 결제를 일괄 승인하시겠습니까?\n각 회원의 이용권이 승인일 + 40일로 설정됩니다.'))return;
+  var ok=0,fail=0;
+  for(var i=0;i<ids.length;i++){
+    try{
+      await approveP(ids[i], true);
+      ok++;
+    }catch(e){fail++;}
+  }
+  selPayBulk.clear();
+  showToast('일괄 승인 완료 (성공 '+ok+'건'+(fail>0?', 실패 '+fail+'건':'')+')', fail>0?'warning':'success');
+  await loadAllData();
+  navigate('payment');
+}
+async function bulkRejectP(){
+  var ids=Array.from(selPayBulk);
+  if(ids.length===0){showToast('선택된 결제가 없습니다','error');return;}
+  var note=prompt(ids.length+'건의 결제를 일괄 거절합니다.\n거절 사유:','');
+  if(note===null)return;
+  var ok=0,fail=0;
+  for(var i=0;i<ids.length;i++){
+    try{
+      await rejectP(ids[i], note||'관리자 일괄 거절', true);
+      ok++;
+    }catch(e){fail++;}
+  }
+  selPayBulk.clear();
+  showToast('일괄 거절 완료 (성공 '+ok+'건'+(fail>0?', 실패 '+fail+'건':'')+')', fail>0?'warning':'success');
+  await loadAllData();
+  navigate('payment');
+}
+// ★ 개발자 전용 — 결제 데이터 삭제 (테스트 매출 리셋 용)
+async function deletePayment(id){
+  if(role!=='dev'){showToast('삭제는 개발자만 가능합니다','error');return;}
+  var p=payments.find(x=>x.id===id);
+  if(!p){showToast('결제를 찾을 수 없습니다','error');return;}
+  if(!confirm('이 결제 기록을 영구 삭제합니다.\n\n회원: '+p.name+' / 금액: ₩'+(p.amount||0).toLocaleString()+'\n상태: '+(p.status==='approved'?'승인':p.status==='pending'?'대기':'거절')+'\n\n⚠️ 매출에서 제외되며 복구 불가능합니다.\n진행하시겠습니까?'))return;
+  try{
+    const {error}=await sb.from('payment_requests').delete().eq('id',id);
+    if(error)throw error;
+    showToast('결제 기록 삭제 완료','success');
+    await loadAllData();
+    navigate('payment');
+  }catch(e){
+    showToast('삭제 실패: '+e.message,'error');
+  }
+}
+// ★ 개발자 전용 — 처리완료 (승인+거절) 결제 일괄 삭제
+async function cleanupOldPayments(){
+  if(role!=='dev'){showToast('정리는 개발자만 가능합니다','error');return;}
+  var visPayments=payments.filter(p=>{
+    var vis=getVisibleBranchIds();
+    if(vis===null)return paymentMatchesPlatform(p);
+    if(p.branch_id==null)return false;
+    return vis.indexOf(p.branch_id)>=0&&paymentMatchesPlatform(p);
+  });
+  var processed=visPayments.filter(p=>p.status!=='pending');
+  if(processed.length===0){showToast('정리할 처리완료 결제가 없습니다','info');return;}
+  if(!confirm('처리완료된 결제 '+processed.length+'건 (승인+거절) 을 영구 삭제합니다.\n\n⚠️ 매출 기록에서도 제외됩니다.\n⚠️ 복구 불가능합니다.\n진행하시겠습니까?'))return;
+  if(!confirm('정말로 삭제하시겠습니까? 이 작업은 되돌릴 수 없습니다.'))return;
+  try{
+    var ids=processed.map(p=>p.id);
+    const {error}=await sb.from('payment_requests').delete().in('id',ids);
+    if(error)throw error;
+    showToast(processed.length+'건 정리 완료','success');
+    await loadAllData();
+    navigate('payment');
+  }catch(e){
+    showToast('정리 실패: '+e.message,'error');
+  }
+}
+
+// ★ 개발자 전용 — 결제관리 엑셀 다운로드 (현재 필터 적용된 결과)
+function exportPaymentExcel(){
+  if(role!=='dev'){showToast('엑셀 다운로드는 개발자만 가능합니다','error');return;}
+  if(typeof XLSX==='undefined'){showToast('엑셀 라이브러리 로드 실패. 새로고침 해주세요','error');return;}
+  
+  var visPayments=payments.filter(p=>{
+    var vis=getVisibleBranchIds();
+    if(vis===null)return paymentMatchesPlatform(p);
+    if(p.branch_id==null)return false;
+    return vis.indexOf(p.branch_id)>=0&&paymentMatchesPlatform(p);
+  });
+  // 현재 필터 적용
+  var list=visPayments.filter(function(p){
+    if(payFilter!=='all' && p.status!==payFilter)return false;
+    if(paySearch){
+      var s=paySearch.toLowerCase();
+      if((p.name||'').toLowerCase().indexOf(s)<0
+        &&(p.username||'').toLowerCase().indexOf(s)<0
+        &&(p.note||'').toLowerCase().indexOf(s)<0
+        &&(p.phone||'').toLowerCase().indexOf(s)<0)return false;
+    }
+    if(payDateFrom){
+      var fromD=new Date(payDateFrom);fromD.setHours(0,0,0,0);
+      var pD=p.createdAt?new Date(p.createdAt):pd(p.date);
+      if(!pD||pD<fromD)return false;
+    }
+    if(payDateTo){
+      var toD=new Date(payDateTo);toD.setHours(23,59,59,999);
+      var pD2=p.createdAt?new Date(p.createdAt):pd(p.date);
+      if(!pD2||pD2>toD)return false;
+    }
+    return true;
+  });
+  
+  if(list.length===0){showToast('다운로드할 데이터가 없습니다','info');return;}
+  
+  // 시트 데이터 (객체 배열 → 자동으로 첫 행이 헤더)
+  var rows=list.map(p=>({
+    '회원이름':p.name||'-',
+    '아이디':p.username||'-',
+    '전화':p.phone||'-',
+    '앱':p.appType==='grab'?'그랩':'토스',
+    '소속지점':branchPath(p.branch_id,false).replace(/<[^>]+>/g,'').replace(/\s+/g,' ').trim(),
+    '금액':p.amount||0,
+    '입금자명':p.note||'',
+    '본인名일치':(p.note&&p.name&&p.note.replace(/\s/g,'')===p.name.replace(/\s/g,''))?'O':(p.note?'X':'-'),
+    '신청일':p.date||'-',
+    '처리일':p.processedAt?isoToFd(p.processedAt):'-',
+    '처리자':p.processedByName||'-',
+    '상태':p.status==='approved'?'승인':p.status==='pending'?'대기':'거절',
+    '관리자메모':p.adminNote||''
+  }));
+  
+  var ws=XLSX.utils.json_to_sheet(rows);
+  // 컬럼 너비
+  ws['!cols']=[
+    {wch:10},{wch:12},{wch:14},{wch:6},{wch:30},{wch:10},
+    {wch:12},{wch:10},{wch:12},{wch:12},{wch:20},{wch:8},{wch:20}
+  ];
+  var wb=XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, '결제관리');
+  
+  var now=new Date();
+  var dateStr=now.getFullYear()+String(now.getMonth()+1).padStart(2,'0')+String(now.getDate()).padStart(2,'0')
+    +'_'+String(now.getHours()).padStart(2,'0')+String(now.getMinutes()).padStart(2,'0');
+  var rangeStr='';
+  if(payDateFrom||payDateTo){
+    rangeStr='_'+(payDateFrom||'시작')+'~'+(payDateTo||'종료');
+  }
+  XLSX.writeFile(wb, '결제관리_'+dateStr+rangeStr+'.xlsx');
+  showToast('엑셀 다운로드 완료 ('+list.length+'건)','success');
+}
+
+// ★ 개발자 전용 — 매출현황 엑셀 다운로드 (날짜 범위 + 회원별/지점별)
+function exportRevenueExcel(){
+  if(role!=='dev'){showToast('엑셀 다운로드는 개발자만 가능합니다','error');return;}
+  if(typeof XLSX==='undefined'){showToast('엑셀 라이브러리 로드 실패. 새로고침 해주세요','error');return;}
+  
+  var fromDate=revDateFrom||lastNDaysStart(30);
+  var toDate=revDateTo||new Date();
+  var fromMs=new Date(fromDate);fromMs.setHours(0,0,0,0);
+  var toMs=new Date(toDate);toMs.setHours(23,59,59,999);
+  
+  var vis=getVisibleBranchIds();
+  
+  // 시트 1: 결제 매출 상세 (날짜 범위 안의 승인 결제)
+  var paymentRows=payments.filter(p=>{
+    if(p.status!=='approved')return false;
+    if(!paymentMatchesPlatform(p))return false;
+    if(vis!==null&&(p.branch_id==null||vis.indexOf(p.branch_id)<0))return false;
+    var pD=p.processedAt?new Date(p.processedAt):(p.createdAt?new Date(p.createdAt):pd(p.date));
+    if(!pD)return false;
+    return pD>=fromMs&&pD<=toMs;
+  }).map(p=>({
+    '승인일':p.processedAt?isoToFd(p.processedAt):p.date,
+    '회원이름':p.name||'-',
+    '아이디':p.username||'-',
+    '전화':p.phone||'-',
+    '앱':p.appType==='grab'?'그랩':'토스',
+    '소속지점':branchPath(p.branch_id,false).replace(/<[^>]+>/g,'').replace(/\s+/g,' ').trim(),
+    '금액':p.amount||0,
+    '입금자명':p.note||'',
+    '처리자':p.processedByName||'-'
+  }));
+  
+  if(paymentRows.length===0){showToast('해당 기간 매출 데이터가 없습니다','info');return;}
+  
+  // 시트 2: 지점별 매출 합계
+  var byBranch={};
+  paymentRows.forEach(r=>{
+    var key=r['소속지점'];
+    if(!byBranch[key])byBranch[key]={'소속지점':key,'건수':0,'합계':0,'토스':0,'그랩':0};
+    byBranch[key]['건수']++;
+    byBranch[key]['합계']+=r['금액'];
+    if(r['앱']==='토스')byBranch[key]['토스']+=r['금액'];
+    else byBranch[key]['그랩']+=r['금액'];
+  });
+  var branchRows=Object.values(byBranch).sort((a,b)=>b['합계']-a['합계']);
+  // 합계 행
+  var grandTotal=branchRows.reduce((s,r)=>s+r['합계'],0);
+  var grandCount=branchRows.reduce((s,r)=>s+r['건수'],0);
+  var grandToss=branchRows.reduce((s,r)=>s+r['토스'],0);
+  var grandGrab=branchRows.reduce((s,r)=>s+r['그랩'],0);
+  branchRows.push({'소속지점':'━━ 합계 ━━','건수':grandCount,'합계':grandTotal,'토스':grandToss,'그랩':grandGrab});
+  
+  // 시트 3: 일자별 매출 합계
+  var byDate={};
+  paymentRows.forEach(r=>{
+    var d=r['승인일'].substring(0,10);  // 2026.05.27 형태
+    if(!byDate[d])byDate[d]={'날짜':d,'건수':0,'합계':0};
+    byDate[d]['건수']++;
+    byDate[d]['합계']+=r['금액'];
+  });
+  var dailyRows=Object.values(byDate).sort((a,b)=>a['날짜'].localeCompare(b['날짜']));
+  
+  // 워크북 생성 (시트 3개)
+  var wb=XLSX.utils.book_new();
+  var ws1=XLSX.utils.json_to_sheet(paymentRows);
+  ws1['!cols']=[{wch:14},{wch:10},{wch:12},{wch:14},{wch:6},{wch:30},{wch:10},{wch:12},{wch:20}];
+  XLSX.utils.book_append_sheet(wb, ws1, '결제 상세');
+  
+  var ws2=XLSX.utils.json_to_sheet(branchRows);
+  ws2['!cols']=[{wch:30},{wch:8},{wch:14},{wch:12},{wch:12}];
+  XLSX.utils.book_append_sheet(wb, ws2, '지점별 합계');
+  
+  var ws3=XLSX.utils.json_to_sheet(dailyRows);
+  ws3['!cols']=[{wch:14},{wch:8},{wch:14}];
+  XLSX.utils.book_append_sheet(wb, ws3, '일자별 합계');
+  
+  var fromStr=fdToIsoDate(fromDate);
+  var toStr=fdToIsoDate(toDate);
+  XLSX.writeFile(wb, '매출현황_'+fromStr+'_'+toStr+'.xlsx');
+  showToast('엑셀 다운로드 완료 ('+paymentRows.length+'건, 3개 시트)','success');
+}
+
+// ★ 개발자 전용 — 매출현황 정리 (현재 표시 범위의 승인 결제 모두 삭제)
+async function cleanupRevenueData(){
+  if(role!=='dev'){showToast('매출 정리는 개발자만 가능합니다','error');return;}
+  
+  var fromDate=revDateFrom||lastNDaysStart(30);
+  var toDate=revDateTo||new Date();
+  var fromMs=new Date(fromDate);fromMs.setHours(0,0,0,0);
+  var toMs=new Date(toDate);toMs.setHours(23,59,59,999);
+  
+  var vis=getVisibleBranchIds();
+  var target=payments.filter(p=>{
+    if(p.status!=='approved')return false;
+    if(!paymentMatchesPlatform(p))return false;
+    if(vis!==null&&(p.branch_id==null||vis.indexOf(p.branch_id)<0))return false;
+    var pD=p.processedAt?new Date(p.processedAt):(p.createdAt?new Date(p.createdAt):pd(p.date));
+    if(!pD)return false;
+    return pD>=fromMs&&pD<=toMs;
+  });
+  
+  if(target.length===0){showToast('정리할 매출 데이터가 없습니다','info');return;}
+  
+  var totalAmount=target.reduce((s,p)=>s+(p.amount||0),0);
+  if(!confirm(
+    '⚠️ 위험한 작업\n\n'+
+    '기간: '+fdToIsoDate(fromDate)+' ~ '+fdToIsoDate(toDate)+'\n'+
+    '대상: 승인된 결제 '+target.length+'건 / 총 ₩'+totalAmount.toLocaleString()+'\n\n'+
+    '이 결제 기록을 모두 영구 삭제합니다.\n'+
+    '매출에서 사라지며 복구 불가능합니다.\n\n'+
+    '진행하시겠습니까?'
+  ))return;
+  if(!confirm('마지막 확인.\n\n'+target.length+'건 / ₩'+totalAmount.toLocaleString()+' 정말로 삭제합니까?'))return;
+  
+  try{
+    var ids=target.map(p=>p.id);
+    // 100개씩 청크 처리 (URL 길이 제한)
+    var chunk=100;
+    for(var i=0;i<ids.length;i+=chunk){
+      var slice=ids.slice(i, i+chunk);
+      const {error}=await sb.from('payment_requests').delete().in('id',slice);
+      if(error)throw error;
+    }
+    showToast(target.length+'건 매출 정리 완료 (₩'+totalAmount.toLocaleString()+')','success');
+    await loadAllData();
+    navigate('revenue');
+  }catch(e){
+    showToast('정리 실패: '+e.message,'error');
+  }
 }
 
 function drawPaymentChart(dayRev){
@@ -2315,26 +2705,44 @@ function drawPaymentChart(dayRev){
     }
   });
 }
-function setPF(f){payFilter=f;navigate('payment');}
+function setPF(f){
+  // 같은 필터 다시 클릭 → all 로 토글
+  payFilter=(payFilter===f?'all':f);
+  selPayBulk.clear();
+  navigate('payment');
+}
 
-async function approveP(id){
+async function approveP(id, skipConfirm){
   var p=payments.find(x=>x.id===id);if(!p)return;
-  if(!confirm('₩'+(p.amount||0).toLocaleString()+' 결제를 승인하시겠습니까?\n\n승인 시 회원의 이용권 만료일이 오늘부터 40일 후로 설정됩니다.'))return;
+  
+  // ★ 보안: 본인이 본인 결제 승인 금지 (dev 만 가능)
+  if(role!=='dev' && curAcc && p.username===curAcc.username){
+    showToast('본인 명의 결제는 다른 어드민이 승인해야 합니다','error');throw new Error('self-approve blocked');
+  }
+  
+  if(!skipConfirm){
+    var msg='₩'+(p.amount||0).toLocaleString()+' 결제를 승인하시겠습니까?';
+    if(p.note){msg+='\n입금자명: '+p.note;}
+    msg+='\n\n승인 시 회원의 이용권 만료일이 오늘부터 40일 후로 설정됩니다.';
+    if(!confirm(msg))return;
+  }
   try{
-    // 결제 승인
     const approvedAt = new Date();
-    const {error:pe}=await sb.from('payment_requests').update({
+    // ★ 처리자 기록 (감사 로그)
+    const updatePayload={
       status:'approved',
       approved_amount:p.amount,
-      processed_at:approvedAt.toISOString()
-    }).eq('id',id);
+      processed_at:approvedAt.toISOString(),
+      processed_by_admin_id:curAcc?curAcc.id:null,
+      processed_by_name:curAcc?(curAcc.name+' (@'+curAcc.username+')'):'unknown'
+    };
+    const {error:pe}=await sb.from('payment_requests').update(updatePayload).eq('id',id);
     if(pe)throw pe;
     
-    // ★ 회원 만료일 = 승인 날짜 + 40일 (기존 만료일 무관, 2026.05.27)
-    //   사용자 요구: "승인날짜 기준부터 40일을 자동으로 연장"
+    // ★ 회원 만료일 = 승인 날짜 + 40일
     var m=members.find(x=>x.id===p.userId);
     if(m){
-      var newExpire=new Date(approvedAt.getTime());  // 승인 시각 복사
+      var newExpire=new Date(approvedAt.getTime());
       newExpire.setDate(newExpire.getDate()+40);
       const {error:ue}=await sb.from('users').update({
         license_expires_at:newExpire.toISOString(),
@@ -2343,29 +2751,39 @@ async function approveP(id){
       if(ue)throw ue;
     }
     
-    showToast('결제 승인 + 이용권 40일 연장 완료 (만료일: '+(m?isoToFd(new Date(approvedAt.getTime()+40*86400000).toISOString()):'')+')','success');
-    await loadAllData();
-    navigate('payment');
+    if(!skipConfirm){
+      showToast('결제 승인 + 이용권 40일 연장 완료','success');
+      await loadAllData();
+      navigate('payment');
+    }
   }catch(e){
-    showToast('승인 실패: '+e.message,'error');
+    if(!skipConfirm)showToast('승인 실패: '+e.message,'error');
+    throw e;
   }
 }
 
-async function rejectP(id){
-  var note=prompt('거절 사유:','');
-  if(note===null)return;
+async function rejectP(id, presetNote, skipConfirm){
+  var note=skipConfirm?(presetNote||'관리자 거절'):prompt('거절 사유:','');
+  if(note===null && !skipConfirm)return;
   try{
-    const {error}=await sb.from('payment_requests').update({
+    // ★ 처리자 기록
+    const updatePayload={
       status:'rejected',
       admin_note:note||'관리자 거절',
-      processed_at:new Date().toISOString()
-    }).eq('id',id);
+      processed_at:new Date().toISOString(),
+      processed_by_admin_id:curAcc?curAcc.id:null,
+      processed_by_name:curAcc?(curAcc.name+' (@'+curAcc.username+')'):'unknown'
+    };
+    const {error}=await sb.from('payment_requests').update(updatePayload).eq('id',id);
     if(error)throw error;
-    showToast('결제 거절 완료','success');
-    await loadAllData();
-    navigate('payment');
+    if(!skipConfirm){
+      showToast('결제 거절 완료','success');
+      await loadAllData();
+      navigate('payment');
+    }
   }catch(e){
-    showToast('거절 실패: '+e.message,'error');
+    if(!skipConfirm)showToast('거절 실패: '+e.message,'error');
+    throw e;
   }
 }
 
@@ -2595,7 +3013,12 @@ function renderRevenue(){
   var totalPay=Object.keys(memberRevenue).filter(bid=>vis===null||vis.indexOf(parseInt(bid))>=0).reduce((s,bid)=>s+memberRevenue[bid],0);
   
   var titleMap={dev:'전체 매출 현황',master:'본인 + 산하 매출',branch:'본인 + 산하 지점 매출',sub:'내 매출'};
-  var html='<div class="ph"><div><h1>'+(titleMap[role]||'매출')+'</h1><p>기간 매출 + 트리 클릭 시 상세 보기</p></div></div>';
+  var html='<div class="ph"><div><h1>'+(titleMap[role]||'매출')+'</h1><p>기간 매출 + 트리 클릭 시 상세 보기</p></div>'
+    +'<div style="display:flex;gap:6px;flex-wrap:wrap">'
+    +(role==='dev'?'<button class="btn btn-p btn-sm" onclick="exportRevenueExcel()">📊 엑셀 다운로드</button>':'')
+    +(role==='dev'?'<button class="btn btn-d btn-sm" onclick="cleanupRevenueData()">🗑 매출 정리</button>':'')
+    +'</div>'
+    +'</div>';
   
   // 기간 선택 바
   html+='<div class="card" style="padding:14px;margin-bottom:14px">'
