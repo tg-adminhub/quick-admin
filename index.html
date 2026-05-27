@@ -368,7 +368,7 @@ tr:last-child td{border-bottom:none}tr:hover td{background:rgba(255,255,255,.015
     <div class="fg"><label class="fl">담당자 이름 *</label><input class="fi2" id="ca-name" placeholder="담당자 이름"></div>
     <div class="fg"><label class="fl">아이디 *</label><input class="fi2" id="ca-username" placeholder="로그인 아이디 (영문/숫자)"></div>
     <div class="fg" style="margin:0"><label class="fl">초기 비밀번호 *</label>
-      <input class="fi2" type="password" id="ca-password" placeholder="6자 이상">
+      <input class="fi2" type="password" id="ca-password" placeholder="4자 이상">
     </div>
     <div style="display:flex;gap:8px;margin-top:14px">
       <button class="btn btn-g" style="flex:1" onclick="closeModal('modal-create-account')">취소</button>
@@ -387,7 +387,7 @@ tr:last-child td{border-bottom:none}tr:hover td{background:rgba(255,255,255,.015
     <div class="fg"><label class="fl">🆔 아이디 * <span style="color:var(--text3);font-size:10px;font-weight:400">(영문/숫자/언더바, 4자 이상)</span></label>
       <input class="fi2" id="ea-username" placeholder="아이디"></div>
     <div class="fg"><label class="fl">🔐 새 비밀번호 <span style="color:var(--text3);font-size:10px;font-weight:400">(비워두면 변경 안 함)</span></label>
-      <input class="fi2" id="ea-password" type="text" placeholder="6자 이상" autocomplete="new-password">
+      <input class="fi2" id="ea-password" type="text" placeholder="4자 이상" autocomplete="new-password">
       <div style="color:var(--text3);font-size:10px;margin-top:4px">⚠ 변경 후 본인 계정이면 다시 로그인 필요</div></div>
     <div style="display:flex;gap:8px;margin-top:14px">
       <button class="btn btn-g" style="flex:1" onclick="closeModal('modal-edit-account')">취소</button>
@@ -502,6 +502,13 @@ function showToast(msg,type){
 //   GLOBAL STATE
 // =====================================================================
 var role='dev', user=null, curAcc=null, page='dashboard', platform='all';
+
+// ★ 최고 권한 (Super Dev) — 다른 개발자(dev) 계정을 만들 수 있는 유일한 사람
+//   현재: username='jyw6410' 만 super dev. 다른 dev 계정도 일반 dev 권한 (master/branch/sub 만 생성 가능)
+const SUPER_DEV_USERNAME = 'jyw6410';
+function isSuperDev(){
+  return curAcc && curAcc.username === SUPER_DEV_USERNAME;
+}
 var selPay=new Set(), memberFilter='all', payFilter='all';
 var pendType=null, pendParent=null;
 var BASE_FEE=60000, DEV_FEE=40000;
@@ -805,15 +812,8 @@ function buildSidebar(){
   rt.innerHTML='<div class="rdot '+r.cls+'"></div>'+r.label+' 시점';
   rt.className='role-tag role-'+r.cls;
   
-  // ★ 역할 전환 드롭다운 (개발자 로그인 시 미리보기 용도)
-  document.getElementById('sb-user').innerHTML='<strong>'+user.name+'</strong>@'+user.id
-    +'<div style="margin-top:8px"><div style="font-size:9px;color:var(--text3);font-weight:700;letter-spacing:.5px;margin-bottom:4px">🔄 역할 시점 전환 (확인용)</div>'
-    +'<select id="role-switcher" onchange="switchRole(this.value)" style="width:100%;background:var(--bg3);border:1px solid var(--border);border-radius:6px;padding:6px 8px;color:var(--text);font-size:11px;outline:none;cursor:pointer;font-family:inherit">'
-    +'<option value="dev"'+(role==='dev'?' selected':'')+'>👁️ 개발자 (전체 보기)</option>'
-    +'<option value="master"'+(role==='master'?' selected':'')+'>🏢 총판 시점</option>'
-    +'<option value="branch"'+(role==='branch'?' selected':'')+'>🏬 지사 시점</option>'
-    +'<option value="sub"'+(role==='sub'?' selected':'')+'>📍 지점 시점</option>'
-    +'</select></div>';
+  // ★ 사용자 표시
+  document.getElementById('sb-user').innerHTML='<strong>'+user.name+'</strong>@'+user.id;
   
   // ★ 역할별로 다른 메뉴 구성
   var navMap={
@@ -1203,7 +1203,7 @@ function showMember(id){
     // 비밀번호 변경 (아이디 바로 밑으로 이동)
     +'<div class="fg" style="background:var(--bg3);border-radius:7px;padding:12px">'
     +'<label class="fl">🔐 비밀번호 변경 <span style="color:var(--text3);font-size:10px;font-weight:400">(비워두면 변경 안 함)</span></label>'
-    +'<input class="fi2" id="mem-newpw" type="text" value="" placeholder="새 비밀번호 (6자 이상) — 입력 시에만 변경됨" autocomplete="new-password">'
+    +'<input class="fi2" id="mem-newpw" type="text" value="" placeholder="새 비밀번호 (4자 이상) — 입력 시에만 변경됨" autocomplete="new-password">'
     +'<div style="color:var(--text3);font-size:10px;margin-top:4px">⚠ 변경 후 회원에게 새 비번을 직접 전달하세요</div>'
     +'</div>'
     // 사용 앱 라디오
@@ -2065,22 +2065,27 @@ async function deleteNotice(id){
 function renderSettings(){
   var get=(k,d)=>appSettings[k]!==undefined?appSettings[k]:(d||'');
   var html='<div class="ph"><div><h1>앱 설정</h1><p>모든 설정은 즉시 앱에 반영됩니다</p></div><button class="btn btn-p" onclick="saveAppSettings()">저장</button></div>';
-  html+='<div class="ss"><div class="ssh"><div class="ssi" style="background:rgba(41,128,185,.12);color:var(--blue)">📦</div><div><div class="sst">APK 배포</div></div></div>'
-  +'<div class="fg"><label class="fl">APK 다운로드 링크</label><input class="fi2" id="set-apk" value="'+get('apk_download_url','')+'" placeholder="https://..."></div>'
-  +'<div class="fg" style="margin:0"><label class="fl">최소 앱 버전</label><input class="fi2" id="set-minver" value="'+get('min_app_version','1')+'"></div></div>';
   
+  // 운영 설정
   html+='<div class="ss"><div class="ssh"><div class="ssi" style="background:rgba(240,180,41,.12);color:var(--accent)">⚙️</div><div><div class="sst">운영 설정</div></div></div>'
   +'<div class="trow"><div><div style="font-size:12px;font-weight:600">점검 모드</div><div style="font-size:11px;color:var(--text2)">활성화 시 기사 앱 차단</div></div><button class="toggle '+(get('maintenance_mode','false')==='true'?'on':'')+'" id="tog-maint" onclick="this.classList.toggle(\'on\')"></button></div></div>';
   
+  // 결제 설정
   html+='<div class="ss"><div class="ssh"><div class="ssi" style="background:rgba(231,76,60,.12);color:var(--red)">💳</div><div><div class="sst">결제 설정</div></div></div>'
   +'<div class="trow" style="border-bottom:1px solid var(--border);padding-bottom:12px;margin-bottom:12px"><div><div style="font-size:12px;font-weight:600">납부 섹션 표시</div></div><button class="toggle '+(get('payment_visible','true')==='true'?'on':'')+'" id="tog-payvis" onclick="this.classList.toggle(\'on\')"></button></div>'
   +'<div class="fg"><label class="fl">납부 계좌 안내</label><input class="fi2" id="set-payacc" value="'+get('payment_account','고객센터 문의')+'"></div>'
   +'<div class="fg" style="margin:0"><label class="fl">무료 기간 종료일</label><input class="fi2" id="set-freeend" value="'+get('free_period_end','')+'" placeholder="YYYY-MM-DD"></div></div>';
   
+  // 고객센터 — 지점별 텔레그램 안내
   html+='<div class="ss"><div class="ssh"><div class="ssi" style="background:rgba(142,68,173,.12);color:var(--purple)">📞</div><div><div class="sst">고객센터</div></div></div>'
-  +'<div class="fg"><label class="fl">텔레그램 ID</label><input class="fi2" id="set-tg" value="'+get('telegram_id','@roadmaster0')+'"></div>'
-  +'<div class="fg" style="margin:0"><label class="fl">운영 시간</label><input class="fi2" id="set-hours" value="'+get('support_hours','10:00~18:00')+'"></div></div>';
+  +'<div class="alert a-blue" style="margin-bottom:12px;font-size:12px;line-height:1.6">'
+  +'<strong>📌 안내</strong><br>'
+  +'회원의 고객센터 문의는 <strong>본인 가입 지점의 텔레그램으로 자동 연결</strong>됩니다.<br>'
+  +'지점별 텔레그램 ID 는 <strong>지사/지점 관리</strong> 메뉴에서 각 조직마다 설정하세요.<br>'
+  +'<span style="color:var(--text3);font-size:11px">예: 회원이 "고양점" 으로 가입 → 고양점의 텔레그램으로 문의 연결</span>'
+  +'</div></div>';
   
+  // 메인 공지
   html+='<div class="ss"><div class="ssh"><div class="ssi" style="background:rgba(46,204,113,.12);color:var(--green)">📢</div><div><div class="sst">메인 공지 (앱 시작 화면)</div></div></div>'
   +'<div class="fg"><label class="fl">제목</label><input class="fi2" id="set-noticetitle" value="'+get('app_notice_title','')+'"></div>'
   +'<div class="fg" style="margin:0"><label class="fl">내용</label><textarea class="fi2" id="set-noticecontent" rows="3">'+get('app_notice_content','')+'</textarea></div></div>';
@@ -2090,14 +2095,10 @@ function renderSettings(){
 
 async function saveAppSettings(){
   var pairs={
-    apk_download_url:document.getElementById('set-apk').value,
-    min_app_version:document.getElementById('set-minver').value,
     maintenance_mode:document.getElementById('tog-maint').classList.contains('on')?'true':'false',
     payment_visible:document.getElementById('tog-payvis').classList.contains('on')?'true':'false',
     payment_account:document.getElementById('set-payacc').value,
     free_period_end:document.getElementById('set-freeend').value,
-    telegram_id:document.getElementById('set-tg').value,
-    support_hours:document.getElementById('set-hours').value,
     app_notice_title:document.getElementById('set-noticetitle').value,
     app_notice_content:document.getElementById('set-noticecontent').value
   };
@@ -2458,7 +2459,11 @@ function openCreateAccount(){
   var roleSel=document.getElementById('ca-role');
   var roleOpts='';
   if(role==='dev'){
-    roleOpts='<option value="master">총판</option><option value="branch">지사</option><option value="sub">지점</option>';
+    // ★ Super Dev (jyw6410) 만 dev 계정 생성 가능
+    if(isSuperDev()){
+      roleOpts='<option value="dev">👁️ 개발자 (Super Dev 전용)</option>';
+    }
+    roleOpts+='<option value="master">총판</option><option value="branch">지사</option><option value="sub">지점</option>';
   }else if(role==='master'){
     roleOpts='<option value="branch">지사</option><option value="sub">지점</option>';
   }
@@ -2477,9 +2482,18 @@ function openCreateAccount(){
 function buildOrgOptions(r){
   var sel=document.getElementById('ca-org');
   var lbl=document.getElementById('ca-org-label');
+  var orgWrap=sel.closest('.fg');
   var vis=getVisibleBranchIds();
   
   console.log('[buildOrgOptions] role='+r+', branches.length='+branches.length+', vis=',vis);
+  
+  // ★ dev 역할은 어떤 조직에도 속하지 않음 — 조직 select 자체 숨김
+  if(r==='dev'){
+    if(orgWrap)orgWrap.style.display='none';
+    sel.innerHTML='<option value="">(개발자 — 소속 없음)</option>';
+    return;
+  }
+  if(orgWrap)orgWrap.style.display='block';
   
   var opts='<option value="">조직 선택...</option>';
   var avail=[];
@@ -2520,9 +2534,15 @@ async function saveAccount(){
   var orgId=document.getElementById('ca-org').value;
   
   if(!name||!uname||!pw){showToast('이름, 아이디, 비밀번호는 필수입니다','error');return;}
-  if(pw.length<6){showToast('비밀번호는 6자 이상이어야 합니다','error');return;}
-  if(!orgId){showToast('소속 조직을 선택하세요','error');return;}
+  if(pw.length<4){showToast('비밀번호는 4자 이상이어야 합니다','error');return;}
   if(!/^[a-zA-Z0-9_]+$/.test(uname)){showToast('아이디는 영문/숫자/언더바만 사용 가능합니다','error');return;}
+  
+  // ★ dev role 생성은 Super Dev 만
+  if(r==='dev' && !isSuperDev()){
+    showToast('개발자 계정 생성 권한이 없습니다 (Super Dev 만 가능)','error');return;
+  }
+  // dev 가 아닌 역할은 조직 필수
+  if(r!=='dev' && !orgId){showToast('소속 조직을 선택하세요','error');return;}
   
   try{
     // 중복 체크
@@ -2535,7 +2555,7 @@ async function saveAccount(){
       password:hashedPw,
       name:name,
       role:r,
-      branch_id:parseInt(orgId)
+      branch_id:(r==='dev'?null:parseInt(orgId))
     };
     const {error}=await sb.from('admins').insert(payload);
     if(error)throw error;
@@ -2935,8 +2955,8 @@ async function loadAccounts(){
       +'<td><div style="display:flex;gap:4px;flex-wrap:wrap">'
       // 수정 권한: 개발자 = 모두 / 본인 = 자기 자신
       +((role==='dev'||isMe)?'<button class="btn btn-g btn-sm" onclick="openEditAccount('+a.id+')">✏️ 수정</button>':'')
-      // 삭제 권한: 개발자 + 본인 제외 + dev 역할 제외
-      +(role==='dev'&&!isMe&&a.role!=='dev'?'<button class="btn btn-d btn-sm" onclick="deleteAccount('+a.id+',\''+a.username+'\')">삭제</button>':'')
+      // 삭제 권한: 개발자 (자기 자신 제외, dev 역할 포함 모두 삭제 가능)
+      +(role==='dev'&&!isMe?'<button class="btn btn-d btn-sm" onclick="deleteAccount('+a.id+',\''+a.username+'\')">삭제</button>':'')
       +((role!=='dev'&&!isMe)?'<span style="font-size:10px;color:var(--text3)">—</span>':'')
       +'</div></td>'
       +'</tr>';
@@ -3009,7 +3029,7 @@ async function saveEditAccount(){
   
   // 비밀번호 변경 시 검증
   if(newPw && newPw.length>0){
-    if(newPw.length<6){showToast('비밀번호는 6자 이상이어야 합니다','error');return;}
+    if(newPw.length<4){showToast('비밀번호는 4자 이상이어야 합니다','error');return;}
   }
   
   // 본인 계정 변경 시 안내
@@ -3066,7 +3086,7 @@ function renderMySettings(){
   +'<div class="alert a-yellow">💡 현재 시점: <b>'+rl[role]+'</b><br>실제 운영 시 본인 조직의 텔레그램 ID, 운영 시간, 담당자 정보를 관리할 수 있습니다.<br>이 페이지는 branches 테이블 추가 후 완전히 활성화됩니다.</div>'
   +'<div class="ss"><div class="ssh"><div class="ssi" style="background:rgba(41,128,185,.12);color:var(--blue)">🔑</div><div><div class="sst">비밀번호 변경</div><div class="sss">본인 어드민 계정 비밀번호만 변경 가능합니다</div></div></div>'
   +'<div class="fg"><label class="fl">현재 비밀번호</label><input class="fi2" type="password" id="pw-current" placeholder="현재 비밀번호"></div>'
-  +'<div class="fg"><label class="fl">새 비밀번호</label><input class="fi2" type="password" id="pw-new" placeholder="6자 이상"></div>'
+  +'<div class="fg"><label class="fl">새 비밀번호</label><input class="fi2" type="password" id="pw-new" placeholder="4자 이상"></div>'
   +'<div class="fg" style="margin-bottom:12px"><label class="fl">새 비밀번호 확인</label><input class="fi2" type="password" id="pw-confirm" placeholder="새 비밀번호 재입력"></div>'
   +'<button class="btn btn-d" onclick="changePassword()">🔑 비밀번호 변경</button></div>';
   return html;
@@ -3076,7 +3096,7 @@ async function changePassword(){
   var nw=document.getElementById('pw-new').value;
   var cf=document.getElementById('pw-confirm').value;
   if(!cur||!nw||!cf){showToast('모든 필드를 입력하세요','error');return;}
-  if(nw.length<6){showToast('새 비밀번호는 6자 이상이어야 합니다','error');return;}
+  if(nw.length<4){showToast('새 비밀번호는 4자 이상이어야 합니다','error');return;}
   if(nw!==cf){showToast('새 비밀번호가 일치하지 않습니다','error');return;}
   if(!curAcc){showToast('계정 정보 없음','error');return;}
   try{
