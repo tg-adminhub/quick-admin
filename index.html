@@ -237,7 +237,6 @@ tr:last-child td{border-bottom:none}tr:hover td{background:rgba(255,255,255,.015
     <div class="fgroup"><label>비밀번호</label><input class="finput" type="password" id="l-pw" placeholder="비밀번호 입력"></div>
     <button class="btn-main" id="login-btn" onclick="doLogin()">로그인</button>
     <div id="login-err" style="display:none;margin-top:10px;text-align:center;font-size:12px;color:var(--red);background:rgba(231,76,60,.08);border:1px solid rgba(231,76,60,.2);border-radius:7px;padding:8px">아이디 또는 비밀번호가 올바르지 않습니다</div>
-    <div style="margin-top:14px;text-align:center;font-size:10px;color:var(--text3)">기본 계정: admin / admin123 또는 jyw6410 / 6410</div>
   </div>
 </div>
 
@@ -305,6 +304,35 @@ tr:last-child td{border-bottom:none}tr:hover td{background:rgba(255,255,255,.015
   <div class="modal-box" style="max-width:560px">
     <div class="mh"><div class="mt" id="modal-member-title">회원 상세</div><button class="mc" onclick="closeModal('modal-member')">×</button></div>
     <div id="modal-member-body"></div>
+  </div>
+</div>
+
+<!-- ADD MEMBER MODAL — 어드민이 직접 회원 가입 -->
+<div class="modal-bg" id="modal-add-member">
+  <div class="modal-box" style="max-width:560px">
+    <div class="mh"><div class="mt">회원 추가 (어드민 가입)</div><button class="mc" onclick="closeModal('modal-add-member')">×</button></div>
+    <div class="alert a-blue">⚡ 어드민 직접 가입은 <b>승인 단계 skip</b> — 즉시 이용 가능 (status='approved')</div>
+    <div class="fg"><label class="fl">앱 유형 *</label>
+      <select class="fi2" id="am-app">
+        <option value="toss">토스 (모든 차종)</option>
+        <option value="grab">그랩 (오토바이)</option>
+      </select>
+    </div>
+    <div class="fg"><label class="fl">소속 지점 *</label>
+      <select class="fi2" id="am-branch">
+        <option value="">지점 선택...</option>
+      </select>
+      <div class="fd">자기 권한 범위 안의 지점만 보임</div>
+    </div>
+    <div class="fg"><label class="fl">아이디 *</label><input class="fi2" id="am-username" placeholder="영문/숫자 4자 이상"></div>
+    <div class="fg"><label class="fl">비밀번호 *</label><input class="fi2" type="password" id="am-password" placeholder="6자 이상"></div>
+    <div class="fg"><label class="fl">실명 *</label><input class="fi2" id="am-realname" placeholder="홍길동"></div>
+    <div class="fg"><label class="fl">주민등록번호 *</label><input class="fi2" id="am-resident" placeholder="앞6자리+뒷1자리 (예: 9001011)" maxlength="7"></div>
+    <div class="fg" style="margin:0"><label class="fl">전화번호 *</label><input class="fi2" id="am-phone" placeholder="01012345678"></div>
+    <div style="display:flex;gap:8px;margin-top:14px">
+      <button class="btn btn-g" style="flex:1" onclick="closeModal('modal-add-member')">취소</button>
+      <button class="btn btn-p" style="flex:1" onclick="saveAddMember()">회원 추가</button>
+    </div>
   </div>
 </div>
 
@@ -1013,7 +1041,7 @@ function renderMembers(){
   var sb_={approved:'bg-green',pending:'bg-yellow',rejected:'bg-red',suspended:'bg-gray'};
   var sl={approved:'승인',pending:'대기',rejected:'거절',suspended:'정지'};
   
-  var html='<div class="ph"><div><h1>회원 관리</h1><p>Supabase 와 실시간 동기화 — 총 '+visMembers.length+'명 (필터 적용: '+list.length+'명)</p></div><div><button class="btn btn-g" onclick="loadAllData().then(()=>{navigate(\'members\');showToast(\'새로고침 완료\',\'success\');})">🔄 새로고침</button></div></div>';
+  var html='<div class="ph"><div><h1>회원 관리</h1><p>Supabase 와 실시간 동기화 — 총 '+visMembers.length+'명 (필터 적용: '+list.length+'명)</p></div><div style="display:flex;gap:6px"><button class="btn btn-p" onclick="openAddMember()">+ 회원 추가</button><button class="btn btn-g" onclick="loadAllData().then(()=>{navigate(\'members\');showToast(\'새로고침 완료\',\'success\');})">🔄 새로고침</button></div></div>';
   
   // 검색 + 날짜 필터 바
   html+='<div class="card" style="padding:14px;margin-bottom:12px"><div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end">'
@@ -1159,6 +1187,12 @@ function showMember(id){
     // 어드민 메모
     +'<div class="fg"><label class="fl">📝 어드민 메모 <span style="color:var(--text3);font-size:10px;font-weight:400">(어드민만 볼 수 있음, 회원에겐 노출 안 됨)</span></label>'
     +'<textarea class="fi2" id="mem-memo" rows="3" placeholder="이 회원에 대한 메모를 자유롭게 적어주세요. 예: 신원확인 완료, 특이사항 등">'+(m.memo||'').replace(/</g,'&lt;')+'</textarea></div>'
+    // 비밀번호 변경 (관리자 직접 변경)
+    +'<div class="fg" style="background:var(--bg3);border-radius:7px;padding:12px;margin-top:10px">'
+    +'<label class="fl">🔐 비밀번호 변경 <span style="color:var(--text3);font-size:10px;font-weight:400">(비워두면 변경 안 함)</span></label>'
+    +'<input class="fi2" id="mem-newpw" type="text" value="" placeholder="새 비밀번호 (6자 이상) — 입력 시에만 변경됨" autocomplete="new-password">'
+    +'<div style="color:var(--text3);font-size:10px;margin-top:4px">⚠ 변경 후 회원에게 새 비번을 직접 전달하세요</div>'
+    +'</div>'
     // 액션 버튼
     +'<div style="display:flex;gap:8px;margin-top:14px">'
     +'<button class="btn btn-g" style="flex:1" onclick="closeModal(\'modal-member\')">닫기</button>'
@@ -1177,14 +1211,21 @@ async function saveMemberInfo(id){
   var rrn=document.getElementById('mem-rrn').value.trim();
   var tg=document.getElementById('mem-tg').value.trim();
   var memo=document.getElementById('mem-memo').value;
+  var newPw=document.getElementById('mem-newpw').value;  // 새 비번 (있으면 변경)
   var appTypeEl=document.querySelector('input[name="mem-apptype"]:checked');
   var appType=appTypeEl?appTypeEl.value:'toss';
   
   if(!name){showToast('이름은 필수입니다','error');return;}
   if(tg&&!tg.startsWith('@'))tg='@'+tg;
   
+  // ★ 비밀번호 변경 시 검증
+  if(newPw && newPw.length>0){
+    if(newPw.length<6){showToast('비밀번호는 6자 이상이어야 합니다','error');return;}
+    if(!confirm('@'+m.username+' 의 비밀번호를 변경하시겠습니까?\n\n새 비번: '+newPw+'\n\n변경 후 회원에게 새 비번을 직접 전달하세요.'))return;
+  }
+  
   try{
-    const {error}=await sb.from('users').update({
+    const updatePayload={
       real_name:name,
       phone:phone||null,
       resident_num:rrn||null,
@@ -1192,7 +1233,13 @@ async function saveMemberInfo(id){
       memo:memo||null,
       app_type:appType,
       updated_at:new Date().toISOString()
-    }).eq('id',id);
+    };
+    // 비밀번호 변경 (입력했을 때만)
+    if(newPw && newPw.length>=6){
+      updatePayload.password = await sha256(newPw);
+    }
+    
+    const {error}=await sb.from('users').update(updatePayload).eq('id',id);
     if(error)throw error;
     
     // 캐시 업데이트
@@ -1204,7 +1251,9 @@ async function saveMemberInfo(id){
     m.appType=appType;
     m.signupApp=appType;
     
-    showToast('회원 정보 저장 완료','success');
+    var msg='회원 정보 저장 완료';
+    if(newPw && newPw.length>=6) msg+=' (비밀번호 변경됨)';
+    showToast(msg,'success');
     closeModal('modal-member');
     navigate(page);
   }catch(e){
@@ -1402,15 +1451,6 @@ function renderDevList(m){
     var nextNum=devs.filter(d=>!d.main).length+devPending.adds.length+1;
     var autoLabel=m.name+nextNum;
     
-    // 회원 만료일까지 남은 일수 (참고용)
-    var memberExpDate=m.expire?pd(m.expire):null;
-    var daysToMemberExp=null;
-    if(memberExpDate){
-      var diff=memberExpDate-new Date();
-      daysToMemberExp=Math.ceil(diff/(1000*60*60*24));
-      if(daysToMemberExp<0)daysToMemberExp=0;
-    }
-    
     addArea.innerHTML='<div style="border:1px dashed var(--border);border-radius:8px;padding:14px;background:var(--bg3)">'
       +'<div style="font-size:11px;color:var(--text2);margin-bottom:10px">➕ 추가 기기 (최대 '+(4-totalCnt)+'대 더 추가 가능)</div>'
       +'<div style="background:var(--bg4);border-radius:6px;padding:8px 10px;margin-bottom:10px;font-size:12px">'
@@ -1418,28 +1458,9 @@ function renderDevList(m){
       +'<span style="color:var(--text3);font-size:10px;margin-left:6px">(회원이름+번호 자동 생성)</span>'
       +'</div>'
       // 요금
-      +'<div style="margin-bottom:12px"><label class="fl">💰 추가 요금 (원)</label><input class="fi2" type="number" id="add-dev-fee" placeholder="예: 40000" value="'+DEV_FEE+'"></div>'
-      // 기한 방식 — 라디오 3개
-      +'<div style="margin-bottom:10px"><label class="fl">📅 이용 기한 방식</label>'
-      +'<div style="display:flex;flex-direction:column;gap:6px;margin-top:4px">'
-      // 옵션 1: 회원 만료일까지
-      +'<label style="display:flex;align-items:center;gap:8px;padding:8px 10px;background:var(--bg4);border-radius:6px;cursor:pointer;font-size:12px">'
-      +'<input type="radio" name="dev-expmode" value="member" checked onchange="onDevExpModeChange()">'
-      +'<span><strong>회원 만료일까지</strong> '+(daysToMemberExp!==null?'<span style="color:var(--accent);font-size:11px">(현재 D-'+daysToMemberExp+', '+m.expire+')</span>':'<span style="color:var(--red);font-size:11px">(만료일 미설정)</span>')+'</span>'
-      +'</label>'
-      // 옵션 2: 다른 일수 지정
-      +'<label style="display:flex;align-items:center;gap:8px;padding:8px 10px;background:var(--bg4);border-radius:6px;cursor:pointer;font-size:12px">'
-      +'<input type="radio" name="dev-expmode" value="custom" onchange="onDevExpModeChange()">'
-      +'<span><strong>다른 일수 지정</strong> — 회원 만료일 + 추가 N일 연장</span>'
-      +'</label>'
-      +'<div id="dev-custom-days" style="display:none;padding-left:28px"><input class="fi2" type="number" id="add-dev-days" placeholder="추가 연장 일수 (예: 40)" value="40" min="1"></div>'
-      // 옵션 3: 연장 안 함
-      +'<label style="display:flex;align-items:center;gap:8px;padding:8px 10px;background:var(--bg4);border-radius:6px;cursor:pointer;font-size:12px">'
-      +'<input type="radio" name="dev-expmode" value="none" onchange="onDevExpModeChange()">'
-      +'<span><strong>연장 안 함</strong> — 기기만 추가, 만료일 변경 없음</span>'
-      +'</label>'
-      +'</div></div>'
-      +'<button class="btn btn-b btn-sm" style="width:100%" onclick="addPendingDev('+m.id+')">+ '+autoLabel+' 미리 추가 (저장 전)</button>'
+      +'<div style="margin-bottom:10px"><label class="fl">💰 추가 요금 (원)</label><input class="fi2" type="number" id="add-dev-fee" placeholder="예: 40000" value="'+DEV_FEE+'"></div>'
+      +'<div class="alert a-blue" style="font-size:11px;margin-bottom:10px">📅 만료일은 회원의 이용권 만료일을 따릅니다. (별도 변경: 이용권 관리 메뉴)</div>'
+      +'<button class="btn btn-b btn-sm" style="width:100%" onclick="addPendingDev('+m.id+')">+ '+autoLabel+' 기기추가</button>'
       +'</div>';
   } else {
     addArea.innerHTML='<div class="alert a-yellow">⚠️ 최대 4대 한도 도달 (메인폰 1 + 추가 3)</div>';
@@ -1468,43 +1489,23 @@ function renderDevList(m){
   document.getElementById('dev-total').textContent='₩'+total.toLocaleString();
 }
 
-// 라디오 변경 시 — "다른 일수 지정" 일 때만 입력칸 표시
-function onDevExpModeChange(){
-  var mode=document.querySelector('input[name="dev-expmode"]:checked').value;
-  document.getElementById('dev-custom-days').style.display=(mode==='custom'?'block':'none');
-}
+// 라디오 변경 시 — "다른 일수 지정" 일 때만 입력칸 표시 (호환용 stub)
+function onDevExpModeChange(){}
 
-// 펜딩 추가
+// 펜딩 추가 (기기 + 요금만)
 function addPendingDev(mid){
   var m=members.find(x=>x.id===mid);
   if(!m)return;
   var feeEl=document.getElementById('add-dev-fee');
   var fee=parseInt(feeEl.value)||DEV_FEE;
-  var modeEl=document.querySelector('input[name="dev-expmode"]:checked');
-  var mode=modeEl?modeEl.value:'member';
-  
-  var days=0;  // 추가 연장 일수 (0 = 만료일 변경 없음)
-  var modeLabel='';
-  
-  if(mode==='member'){
-    // 회원 만료일까지 — 만료일 변경 없음 (기기만 추가, 같은 만료일 공유)
-    days=0;
-    modeLabel='회원 만료일까지';
-  } else if(mode==='custom'){
-    var daysEl=document.getElementById('add-dev-days');
-    days=parseInt(daysEl.value)||0;
-    if(days<1){showToast('연장 일수는 1일 이상이어야 합니다','error');return;}
-    modeLabel='+'+days+'일 추가 연장';
-  } else if(mode==='none'){
-    days=0;
-    modeLabel='연장 안 함';
-  }
+  if(fee<0){showToast('요금은 0 이상이어야 합니다','error');return;}
   
   var nextNum=m.devices.filter(d=>!d.main).length+devPending.adds.length+1;
   var autoLabel=m.name+nextNum;
   
-  devPending.adds.push({label:autoLabel,fee:fee,days:days,modeLabel:modeLabel});
-  showToast('미리 추가됨 — 저장하기를 눌러야 실제 반영됩니다','info');
+  // ★ 기기 추가 시 만료일 변경 없음 — 이용권 관리에서 별도 관리
+  devPending.adds.push({label:autoLabel,fee:fee,days:0,modeLabel:'요금만 추가'});
+  showToast('기기 추가됨 — 저장하기를 눌러야 실제 반영됩니다','info');
   renderDevList(m);
 }
 
@@ -1840,31 +1841,31 @@ function setPF(f){payFilter=f;navigate('payment');}
 
 async function approveP(id){
   var p=payments.find(x=>x.id===id);if(!p)return;
-  if(!confirm('₩'+(p.amount||0).toLocaleString()+' 결제를 승인하시겠습니까?\n\n승인 시 회원의 이용권이 40일 연장됩니다.'))return;
+  if(!confirm('₩'+(p.amount||0).toLocaleString()+' 결제를 승인하시겠습니까?\n\n승인 시 회원의 이용권 만료일이 오늘부터 40일 후로 설정됩니다.'))return;
   try{
     // 결제 승인
+    const approvedAt = new Date();
     const {error:pe}=await sb.from('payment_requests').update({
       status:'approved',
       approved_amount:p.amount,
-      processed_at:new Date().toISOString()
+      processed_at:approvedAt.toISOString()
     }).eq('id',id);
     if(pe)throw pe;
     
-    // 회원 만료일 40일 연장 (6만원 = 40일 정책)
+    // ★ 회원 만료일 = 승인 날짜 + 40일 (기존 만료일 무관, 2026.05.27)
+    //   사용자 요구: "승인날짜 기준부터 40일을 자동으로 연장"
     var m=members.find(x=>x.id===p.userId);
     if(m){
-      var base=m.expire?pd(m.expire):new Date();
-      if(!base||isNaN(base))base=new Date();
-      if(base<new Date())base=new Date(); // 이미 만료된 경우 오늘부터
-      base.setDate(base.getDate()+40);
+      var newExpire=new Date(approvedAt.getTime());  // 승인 시각 복사
+      newExpire.setDate(newExpire.getDate()+40);
       const {error:ue}=await sb.from('users').update({
-        license_expires_at:base.toISOString(),
+        license_expires_at:newExpire.toISOString(),
         is_free_user:false
       }).eq('id',p.userId);
       if(ue)throw ue;
     }
     
-    showToast('결제 승인 + 이용권 40일 연장 완료','success');
+    showToast('결제 승인 + 이용권 40일 연장 완료 (만료일: '+(m?isoToFd(new Date(approvedAt.getTime()+40*86400000).toISOString()):'')+')','success');
     await loadAllData();
     navigate('payment');
   }catch(e){
@@ -2442,6 +2443,85 @@ async function saveAccount(){
     navigate('accounts');
   }catch(e){
     showToast('생성 실패: '+e.message,'error');
+  }
+}
+
+// =====================================================================
+//   ADD MEMBER — 어드민이 직접 회원 가입 (기사 추가)
+//   권한 격리: 자기 권한 범위 안의 지점만 선택 가능
+//   승인 단계 skip — status='approved' 로 즉시 INSERT
+// =====================================================================
+function openAddMember(){
+  // 입력 필드 초기화
+  ['am-username','am-password','am-realname','am-resident','am-phone'].forEach(id=>{
+    var el=document.getElementById(id);if(el)el.value='';
+  });
+  document.getElementById('am-app').value='toss';
+  
+  // 지점 select — 자기 권한 범위 안의 지점만
+  var vis=getVisibleBranchIds();
+  var visBranches=vis===null?branches:branches.filter(b=>vis.indexOf(b.id)>=0);
+  // 지점 타입만 (총판/지사 제외 — 회원은 지점 소속)
+  var subBranches=visBranches.filter(b=>b.type==='sub');
+  if(subBranches.length===0){
+    showToast('가입 가능한 지점이 없습니다','error');return;
+  }
+  var sel=document.getElementById('am-branch');
+  sel.innerHTML='<option value="">지점 선택...</option>'+
+    subBranches.map(b=>'<option value="'+b.id+'">'+b.name+'</option>').join('');
+  
+  openModalHelper('modal-add-member');
+}
+
+// 헬퍼 - 모달 열기
+function openModalHelper(id){document.getElementById(id).classList.add('open');}
+
+async function saveAddMember(){
+  var app=document.getElementById('am-app').value;
+  var bid=document.getElementById('am-branch').value;
+  var uname=document.getElementById('am-username').value.trim();
+  var pw=document.getElementById('am-password').value;
+  var realName=document.getElementById('am-realname').value.trim();
+  var resident=document.getElementById('am-resident').value.trim();
+  var phone=document.getElementById('am-phone').value.trim();
+  
+  // 검증
+  if(!bid){showToast('지점을 선택하세요','error');return;}
+  if(!uname||uname.length<4){showToast('아이디는 4자 이상이어야 합니다','error');return;}
+  if(!/^[a-zA-Z0-9_]+$/.test(uname)){showToast('아이디는 영문/숫자/언더바만 사용 가능합니다','error');return;}
+  if(!pw||pw.length<6){showToast('비밀번호는 6자 이상이어야 합니다','error');return;}
+  if(!realName){showToast('실명을 입력하세요','error');return;}
+  if(!/^\d{7}$/.test(resident)){showToast('주민등록번호는 앞6자리+뒷1자리 (총 7자리)로 입력하세요','error');return;}
+  if(!phone){showToast('전화번호를 입력하세요','error');return;}
+  
+  try{
+    // 중복 체크
+    const {data:existing}=await sb.from('users').select('id').eq('username',uname).maybeSingle();
+    if(existing){showToast('이미 사용 중인 아이디입니다','error');return;}
+    
+    const hashedPw=await sha256(pw);
+    const payload={
+      username:uname,
+      password:hashedPw,
+      real_name:realName,
+      resident_num:resident,
+      phone:phone,
+      branch_id:parseInt(bid),
+      app_type:app,
+      status:'approved',  // ★ 어드민 직접 가입 = 승인 단계 skip
+      is_free_user:false,
+      approved_at:new Date().toISOString()
+    };
+    const {error}=await sb.from('users').insert(payload);
+    if(error)throw error;
+    
+    closeModal('modal-add-member');
+    showToast('회원 추가 완료: @'+uname+' (즉시 이용 가능)','success');
+    // 데이터 새로고침 + 회원 화면 갱신
+    await loadAllData();
+    navigate('members');
+  }catch(e){
+    showToast('회원 추가 실패: '+e.message,'error');
   }
 }
 
