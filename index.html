@@ -318,11 +318,22 @@ tr:last-child td{border-bottom:none}tr:hover td{background:rgba(255,255,255,.015
         <option value="grab">그랩 (오토바이)</option>
       </select>
     </div>
+    <!-- ★ 소속 단계별 — 총판/지사/지점 -->
+    <div class="fg" id="am-master-wrap"><label class="fl">소속 총판 *</label>
+      <select class="fi2" id="am-master" onchange="onAddMemberMasterChange()">
+        <option value="">총판 선택...</option>
+      </select>
+    </div>
+    <div class="fg" id="am-branch-wrap" style="display:none"><label class="fl">소속 지사 *</label>
+      <select class="fi2" id="am-branch-sel" onchange="onAddMemberBranchChange()">
+        <option value="">지사 선택...</option>
+      </select>
+    </div>
     <div class="fg"><label class="fl">소속 지점 *</label>
       <select class="fi2" id="am-branch">
         <option value="">지점 선택...</option>
       </select>
-      <div class="fd">자기 권한 범위 안의 지점만 보임</div>
+      <div class="fd">총판 → 지사 → 지점 순서로 선택해주세요</div>
     </div>
     <div class="fg"><label class="fl">아이디 *</label><input class="fi2" id="am-username" placeholder="영문/숫자 4자 이상"></div>
     <div class="fg"><label class="fl">비밀번호 *</label><input class="fi2" type="password" id="am-password" placeholder="6자 이상"></div>
@@ -1168,7 +1179,8 @@ function showMember(id){
   // 편집 가능 폼
   var formHtml='<div class="alert a-blue">✏️ 잘못 기입된 정보가 있으면 직접 수정 후 저장 버튼을 눌러주세요</div>'
     +'<div class="fg"><label class="fl">이름</label><input class="fi2" id="mem-name" value="'+(m.name||'').replace(/"/g,'&quot;')+'"></div>'
-    +'<div class="fg"><label class="fl">아이디 (변경 불가)</label><input class="fi2" value="@'+m.username+'" disabled style="opacity:.6"></div>'
+    +'<div class="fg"><label class="fl">🆔 아이디 <span style="color:var(--text3);font-size:10px;font-weight:400">(변경 시 회원에게 새 아이디 전달 필요)</span></label>'
+    +'<input class="fi2" id="mem-username" value="'+m.username+'" placeholder="영문/숫자/언더바 4자 이상" data-original="'+m.username+'"></div>'
     // 사용 앱 라디오
     +'<div class="fg"><label class="fl">📱 사용 앱</label>'
     +'<div style="display:flex;gap:8px">'
@@ -1184,6 +1196,26 @@ function showMember(id){
     +'<div class="fg"><label class="fl">전화</label><input class="fi2" id="mem-phone" value="'+(m.phone||'').replace(/"/g,'&quot;')+'" placeholder="010-0000-0000"></div>'
     +'<div class="fg"><label class="fl">주민번호 앞 6자리</label><input class="fi2" id="mem-rrn" value="'+(m.residentNum||'').replace(/"/g,'&quot;')+'" placeholder="900101-1******" maxlength="14"></div>'
     +'<div class="fg"><label class="fl">텔레그램 ID</label><input class="fi2" id="mem-tg" value="'+(m.telegramId||'').replace(/"/g,'&quot;')+'" placeholder="@telegram_id"></div>'
+    // 소속 지점 변경
+    +'<div class="fg"><label class="fl">📍 소속 지점</label>'
+    +'<select class="fi2" id="mem-branch">'
+    +(function(){
+        var vis=getVisibleBranchIds();
+        var visBranches=vis===null?branches:branches.filter(b=>vis.indexOf(b.id)>=0);
+        var subBranches=visBranches.filter(b=>b.type==='sub');
+        var opts='<option value="">— 지점 선택 —</option>';
+        if(subBranches.length===0){
+          opts='<option value="">⚠️ 등록된 지점이 없습니다 — 지점 관리에서 먼저 추가하세요</option>';
+        }else{
+          subBranches.forEach(function(b){
+            var pm=branches.find(x=>x.id===b.parent_id);
+            var sel=(m.branch_id===b.id)?' selected':'';
+            opts+='<option value="'+b.id+'"'+sel+'>'+b.name+(pm?' ['+pm.name+']':'')+'</option>';
+          });
+        }
+        return opts;
+      })()
+    +'</select></div>'
     // 어드민 메모
     +'<div class="fg"><label class="fl">📝 어드민 메모 <span style="color:var(--text3);font-size:10px;font-weight:400">(어드민만 볼 수 있음, 회원에겐 노출 안 됨)</span></label>'
     +'<textarea class="fi2" id="mem-memo" rows="3" placeholder="이 회원에 대한 메모를 자유롭게 적어주세요. 예: 신원확인 완료, 특이사항 등">'+(m.memo||'').replace(/</g,'&lt;')+'</textarea></div>'
@@ -1207,34 +1239,56 @@ async function saveMemberInfo(id){
   var m=members.find(x=>x.id===id);
   if(!m){showToast('회원을 찾을 수 없습니다','error');return;}
   var name=document.getElementById('mem-name').value.trim();
+  var usernameEl=document.getElementById('mem-username');
+  var newUsername=usernameEl?usernameEl.value.trim():m.username;
+  var originalUsername=usernameEl?usernameEl.getAttribute('data-original'):m.username;
   var phone=document.getElementById('mem-phone').value.trim();
   var rrn=document.getElementById('mem-rrn').value.trim();
   var tg=document.getElementById('mem-tg').value.trim();
   var memo=document.getElementById('mem-memo').value;
-  var newPw=document.getElementById('mem-newpw').value;  // 새 비번 (있으면 변경)
+  var newPw=document.getElementById('mem-newpw').value;
   var appTypeEl=document.querySelector('input[name="mem-apptype"]:checked');
   var appType=appTypeEl?appTypeEl.value:'toss';
+  var branchSel=document.getElementById('mem-branch');
+  var newBranchId=branchSel?(branchSel.value?parseInt(branchSel.value):null):null;
   
   if(!name){showToast('이름은 필수입니다','error');return;}
+  if(!newUsername){showToast('아이디는 필수입니다','error');return;}
+  if(!/^[a-zA-Z0-9_]+$/.test(newUsername)){showToast('아이디는 영문/숫자/언더바만 사용 가능','error');return;}
+  if(newUsername.length<4){showToast('아이디는 4자 이상이어야 합니다','error');return;}
   if(tg&&!tg.startsWith('@'))tg='@'+tg;
   
-  // ★ 비밀번호 변경 시 검증
+  // ★ 아이디 변경 시 확인 + 중복 체크
+  var usernameChanged=(newUsername!==originalUsername);
+  if(usernameChanged){
+    if(!confirm('@'+originalUsername+' → @'+newUsername+' 으로 아이디를 변경합니다.\n\n변경 후 회원에게 새 아이디를 직접 전달하세요. 진행하시겠습니까?'))return;
+    // 중복 체크
+    try{
+      const {data:existing}=await sb.from('users').select('id').eq('username',newUsername).neq('id',id).maybeSingle();
+      if(existing){showToast('이미 사용 중인 아이디입니다','error');return;}
+    }catch(e){
+      showToast('중복 확인 실패: '+e.message,'error');return;
+    }
+  }
+  
+  // 비밀번호 변경 시 검증
   if(newPw && newPw.length>0){
     if(newPw.length<6){showToast('비밀번호는 6자 이상이어야 합니다','error');return;}
-    if(!confirm('@'+m.username+' 의 비밀번호를 변경하시겠습니까?\n\n새 비번: '+newPw+'\n\n변경 후 회원에게 새 비번을 직접 전달하세요.'))return;
+    if(!confirm('@'+(usernameChanged?newUsername:m.username)+' 의 비밀번호를 변경하시겠습니까?\n\n새 비번: '+newPw+'\n\n변경 후 회원에게 새 비번을 직접 전달하세요.'))return;
   }
   
   try{
     const updatePayload={
+      username:newUsername,
       real_name:name,
       phone:phone||null,
       resident_num:rrn||null,
       telegram_id:tg||null,
       memo:memo||null,
       app_type:appType,
+      branch_id:newBranchId,
       updated_at:new Date().toISOString()
     };
-    // 비밀번호 변경 (입력했을 때만)
     if(newPw && newPw.length>=6){
       updatePayload.password = await sha256(newPw);
     }
@@ -1243,6 +1297,7 @@ async function saveMemberInfo(id){
     if(error)throw error;
     
     // 캐시 업데이트
+    m.username=newUsername;
     m.name=name;
     m.phone=phone;
     m.residentNum=rrn;
@@ -1250,8 +1305,10 @@ async function saveMemberInfo(id){
     m.memo=memo;
     m.appType=appType;
     m.signupApp=appType;
+    m.branch_id=newBranchId;
     
     var msg='회원 정보 저장 완료';
+    if(usernameChanged) msg+=' (아이디 변경됨: @'+newUsername+')';
     if(newPw && newPw.length>=6) msg+=' (비밀번호 변경됨)';
     showToast(msg,'success');
     closeModal('modal-member');
@@ -1296,7 +1353,7 @@ function renderLicense(){
     return true;
   });
   
-  var html='<div class="ph"><div><h1>이용권 관리</h1><p>전체 '+visAll.length+'명 · 표시 '+list.length+'명</p></div><div><button class="btn btn-g" onclick="loadAllData().then(()=>{navigate(\'license\');showToast(\'새로고침 완료\',\'success\');})">🔄</button></div></div>'
+  var html='<div class="ph"><div><h1>이용권 관리</h1><p>전체 '+visAll.length+'명 · 표시 '+list.length+'명</p></div><div><button class="btn btn-g" onclick="loadAllData().then(()=>{navigate(\'license\');showToast(\'새로고침 완료\',\'success\');})">🔄 새로고침</button></div></div>'
   // 통계 카드 (3일내 만료 카드는 클릭 가능)
   +'<div class="sgrid sg4">'
   +'<div class="scard'+(licenseExpireOnly?'':'')+'" onclick="licenseExpireOnly=false;licenseSearch=\'\';licenseDateFrom=null;licenseDateTo=null;navigate(\'license\')" style="cursor:pointer"><div class="scard-top"><div class="slabel">전체 회원</div><div class="sicon" style="background:rgba(41,128,185,.12);color:var(--blue)">👥</div></div><div class="sval">'+visAll.length+'</div></div>'
@@ -1457,6 +1514,8 @@ function renderDevList(m){
       +'<span style="color:var(--text3)">자동 라벨:</span> <strong style="color:var(--accent);font-family:monospace">'+autoLabel+'</strong>'
       +'<span style="color:var(--text3);font-size:10px;margin-left:6px">(회원이름+번호 자동 생성)</span>'
       +'</div>'
+      // 전화번호
+      +'<div style="margin-bottom:10px"><label class="fl">📞 추가 기기 전화번호</label><input class="fi2" type="tel" id="add-dev-phone" placeholder="010-0000-0000"></div>'
       // 요금
       +'<div style="margin-bottom:10px"><label class="fl">💰 추가 요금 (원)</label><input class="fi2" type="number" id="add-dev-fee" placeholder="예: 40000" value="'+DEV_FEE+'"></div>'
       +'<div class="alert a-blue" style="font-size:11px;margin-bottom:10px">📅 만료일은 회원의 이용권 만료일을 따릅니다. (별도 변경: 이용권 관리 메뉴)</div>'
@@ -1492,19 +1551,22 @@ function renderDevList(m){
 // 라디오 변경 시 — "다른 일수 지정" 일 때만 입력칸 표시 (호환용 stub)
 function onDevExpModeChange(){}
 
-// 펜딩 추가 (기기 + 요금만)
+// 펜딩 추가 (기기 + 요금 + 전화번호)
 function addPendingDev(mid){
   var m=members.find(x=>x.id===mid);
   if(!m)return;
   var feeEl=document.getElementById('add-dev-fee');
+  var phoneEl=document.getElementById('add-dev-phone');
   var fee=parseInt(feeEl.value)||DEV_FEE;
+  var phone=phoneEl?phoneEl.value.trim():'';
   if(fee<0){showToast('요금은 0 이상이어야 합니다','error');return;}
+  if(!phone){showToast('전화번호를 입력하세요','error');return;}
   
   var nextNum=m.devices.filter(d=>!d.main).length+devPending.adds.length+1;
   var autoLabel=m.name+nextNum;
   
-  // ★ 기기 추가 시 만료일 변경 없음 — 이용권 관리에서 별도 관리
-  devPending.adds.push({label:autoLabel,fee:fee,days:0,modeLabel:'요금만 추가'});
+  // ★ 기기 추가 — phone 도 같이 저장
+  devPending.adds.push({label:autoLabel,fee:fee,phone:phone,days:0,modeLabel:'요금만 추가'});
   showToast('기기 추가됨 — 저장하기를 눌러야 실제 반영됩니다','info');
   renderDevList(m);
 }
@@ -1578,11 +1640,11 @@ async function saveAllDevChanges(){
       const {data,error}=await sb.from('user_devices').insert({
         user_id:m.id,
         label:addItem.label,
-        phone_number:''  // 빈 문자열 (NOT NULL 제약 회피용 — DB 변경했으면 null 도 가능)
+        phone_number:addItem.phone||''  // ★ 입력된 전화번호 저장
       }).select().single();
       if(error)throw new Error('추가 실패: '+error.message);
       // 캐시 업데이트
-      m.devices.push({id:data.id,num:m.devices.length+1,label:addItem.label,platform:'toss',fee:addItem.fee,main:false});
+      m.devices.push({id:data.id,num:m.devices.length+1,label:addItem.label,phone:addItem.phone||'',platform:'toss',fee:addItem.fee,main:false});
       totalDays+=addItem.days;
     }
     
@@ -1739,7 +1801,7 @@ function renderPayment(){
     if(dayRev.hasOwnProperty(key))dayRev[key]+=(p.amount||0);
   });
   
-  var html='<div class="ph"><div><h1>결제 관리</h1><p>최근 30일 매출 + 일별 추이</p></div><div><button class="btn btn-g" onclick="loadAllData().then(()=>{navigate(\'payment\');showToast(\'새로고침 완료\',\'success\');})">🔄</button></div></div>'
+  var html='<div class="ph"><div><h1>결제 관리</h1><p>최근 30일 매출 + 일별 추이</p></div><div><button class="btn btn-g" onclick="loadAllData().then(()=>{navigate(\'payment\');showToast(\'새로고침 완료\',\'success\');})">🔄 새로고침</button></div></div>'
   +'<div class="sgrid sg4">'
   +'<div class="scard"><div class="scard-top"><div class="slabel">대기</div><div class="sicon" style="background:rgba(240,180,41,.12);color:var(--accent)">⏳</div></div><div class="sval" style="color:var(--accent)">'+pend+'</div></div>'
   +'<div class="scard"><div class="scard-top"><div class="slabel">승인</div><div class="sicon" style="background:rgba(39,174,96,.12);color:var(--green)">✓</div></div><div class="sval" style="color:var(--green)">'+visPayments.filter(function(p){return p.status==='approved';}).length+'</div></div>'
@@ -2191,6 +2253,26 @@ var pendOrgType=null;     // 'master' | 'branch' | 'sub'
 var pendOrgParent=null;   // 부모 branch_id (null = 최상위 = 총판)
 
 function openOrgModal(type,parentId){
+  // ★ 권한별 자동 부모 결정 (2026.05.27)
+  //   총판 시점: 본인 총판 자동 (지사 추가 시 본인 총판으로)
+  //   지사 시점: 본인 지사 자동 (지점 추가 시 본인 지사로)
+  //   = 본인 시점이면 어차피 본인 산하만 가능하니까 select 안 보여주고 자동 처리
+  if(!parentId && role!=='dev'){
+    if(type==='branch' && role==='master'){
+      // 총판이 지사 만들기 — 본인 총판이 부모
+      var myMaster=branches.find(b=>b.type==='master'&&getVisibleBranchIds().indexOf(b.id)>=0);
+      if(myMaster)parentId=myMaster.id;
+    }else if(type==='sub' && role==='master'){
+      // 총판이 지점 만들기 — 본인 총판 직속 지점
+      var myMaster=branches.find(b=>b.type==='master'&&getVisibleBranchIds().indexOf(b.id)>=0);
+      if(myMaster)parentId=myMaster.id;
+    }else if(type==='sub' && role==='branch'){
+      // 지사가 지점 만들기 — 본인 지사가 부모
+      var myBranch=branches.find(b=>b.type==='branch'&&getVisibleBranchIds().indexOf(b.id)>=0);
+      if(myBranch)parentId=myBranch.id;
+    }
+  }
+  
   pendOrgType=type;
   pendOrgParent=parentId;
   var titles={master:'총판 추가',branch:'지사 추가',sub:'지점 추가'};
@@ -2458,19 +2540,102 @@ function openAddMember(){
   });
   document.getElementById('am-app').value='toss';
   
-  // 지점 select — 자기 권한 범위 안의 지점만
+  // ★ 단계별 소속 — 권한별 자동 처리 (2026.05.27)
   var vis=getVisibleBranchIds();
   var visBranches=vis===null?branches:branches.filter(b=>vis.indexOf(b.id)>=0);
-  // 지점 타입만 (총판/지사 제외 — 회원은 지점 소속)
   var subBranches=visBranches.filter(b=>b.type==='sub');
   if(subBranches.length===0){
-    showToast('가입 가능한 지점이 없습니다','error');return;
+    showToast('등록된 지점이 없습니다 — 먼저 지점 관리에서 추가해주세요','error');return;
   }
-  var sel=document.getElementById('am-branch');
-  sel.innerHTML='<option value="">지점 선택...</option>'+
-    subBranches.map(b=>'<option value="'+b.id+'">'+b.name+'</option>').join('');
+  
+  var masterWrap=document.getElementById('am-master-wrap');
+  var branchWrap=document.getElementById('am-branch-wrap');
+  var masterSel=document.getElementById('am-master');
+  var branchSel=document.getElementById('am-branch-sel');
+  var subSel=document.getElementById('am-branch');
+  
+  // 권한별 표시
+  if(role==='dev'){
+    // 개발자: 총판 → 지사 → 지점 모두 선택
+    masterWrap.style.display='block';
+    branchWrap.style.display='none';  // 총판 선택 후 표시
+    var masters=branches.filter(b=>b.type==='master');
+    masterSel.innerHTML='<option value="">총판 선택...</option>'+
+      masters.map(b=>'<option value="'+b.id+'">🏢 '+b.name+'</option>').join('');
+    subSel.innerHTML='<option value="">먼저 총판 → 지사를 선택하세요</option>';
+  }else if(role==='master'){
+    // 총판: 본인 총판 고정, 지사 → 지점 선택
+    masterWrap.style.display='none';
+    branchWrap.style.display='block';
+    var myMaster=visBranches.find(b=>b.type==='master');
+    masterSel.value=myMaster?myMaster.id:'';
+    // 본인 산하 지사들
+    var myBranches=visBranches.filter(b=>b.type==='branch'&&b.parent_id===(myMaster?myMaster.id:null));
+    branchSel.innerHTML='<option value="">지사 선택...</option>'+
+      myBranches.map(b=>'<option value="'+b.id+'">🏬 '+b.name+'</option>').join('');
+    subSel.innerHTML='<option value="">먼저 지사를 선택하세요</option>';
+  }else if(role==='branch'){
+    // 지사: 본인 지사 고정, 지점만 선택
+    masterWrap.style.display='none';
+    branchWrap.style.display='none';
+    var myBranch=visBranches.find(b=>b.type==='branch');
+    var mySubs=subBranches.filter(b=>b.parent_id===(myBranch?myBranch.id:null));
+    subSel.innerHTML='<option value="">지점 선택...</option>'+
+      mySubs.map(b=>'<option value="'+b.id+'">📍 '+b.name+'</option>').join('');
+  }else{
+    // 지점 시점: 본인 지점만
+    masterWrap.style.display='none';
+    branchWrap.style.display='none';
+    subSel.innerHTML='<option value="">지점 선택...</option>'+
+      subBranches.map(b=>'<option value="'+b.id+'">📍 '+b.name+'</option>').join('');
+  }
   
   openModalHelper('modal-add-member');
+}
+
+// ★ 총판 변경 — 해당 총판 산하 지사들로 채움
+function onAddMemberMasterChange(){
+  var mid=parseInt(document.getElementById('am-master').value);
+  var branchWrap=document.getElementById('am-branch-wrap');
+  var branchSel=document.getElementById('am-branch-sel');
+  var subSel=document.getElementById('am-branch');
+  if(!mid){
+    branchWrap.style.display='none';
+    subSel.innerHTML='<option value="">먼저 총판 → 지사를 선택하세요</option>';
+    return;
+  }
+  branchWrap.style.display='block';
+  var myBranches=branches.filter(b=>b.type==='branch'&&b.parent_id===mid);
+  branchSel.innerHTML='<option value="">지사 선택...</option>'+
+    myBranches.map(b=>'<option value="'+b.id+'">🏬 '+b.name+'</option>').join('');
+  // 직속 지점 (총판 바로 산하)
+  var directSubs=branches.filter(b=>b.type==='sub'&&b.parent_id===mid);
+  if(directSubs.length>0){
+    branchSel.innerHTML+='<option value="direct">— 직속 지점 사용 —</option>';
+  }
+  subSel.innerHTML='<option value="">먼저 지사를 선택하세요</option>';
+}
+
+// ★ 지사 변경 — 해당 지사 산하 지점들로 채움
+function onAddMemberBranchChange(){
+  var bid=document.getElementById('am-branch-sel').value;
+  var subSel=document.getElementById('am-branch');
+  if(!bid){
+    subSel.innerHTML='<option value="">먼저 지사를 선택하세요</option>';
+    return;
+  }
+  if(bid==='direct'){
+    // 총판 직속 지점
+    var mid=parseInt(document.getElementById('am-master').value);
+    var directSubs=branches.filter(b=>b.type==='sub'&&b.parent_id===mid);
+    subSel.innerHTML='<option value="">지점 선택...</option>'+
+      directSubs.map(b=>'<option value="'+b.id+'">📍 '+b.name+' (직속)</option>').join('');
+  }else{
+    var parentBid=parseInt(bid);
+    var mySubs=branches.filter(b=>b.type==='sub'&&b.parent_id===parentBid);
+    subSel.innerHTML='<option value="">지점 선택...</option>'+
+      mySubs.map(b=>'<option value="'+b.id+'">📍 '+b.name+'</option>').join('');
+  }
 }
 
 // 헬퍼 - 모달 열기
