@@ -813,11 +813,9 @@ function checkExpiry(){
 //   SIDEBAR
 // =====================================================================
 function buildSidebar(){
-  var rc={dev:{label:'개발자',cls:'dev'},master:{label:'총판',cls:'master'},branch:{label:'지사',cls:'branch'},sub:{label:'지점',cls:'sub'}};
-  var r=rc[role]||rc.dev;
+  // ★ 시점 표시 제거 (2026.05.27) — 사용자가 본인 권한만 사용하면 됨
   var rt=document.getElementById('role-tag');
-  rt.innerHTML='<div class="rdot '+r.cls+'"></div>'+r.label+' 시점';
-  rt.className='role-tag role-'+r.cls;
+  if(rt)rt.style.display='none';
   
   // ★ 사용자 표시
   document.getElementById('sb-user').innerHTML='<strong>'+user.name+'</strong>@'+user.id;
@@ -981,17 +979,7 @@ function renderDash(){
   var totalRev=visPayments.filter(function(p){return p.status==='approved';}).reduce(function(a,b){return a+(b.amount||0);},0);
   var pendPay=visPayments.filter(function(p){return p.status==='pending';}).length;
   
-  // 시점 안내 라벨
-  var scopeLabel='';
-  if(role==='dev')scopeLabel='👁️ 전체 시스템 (개발자 시점)';
-  else{
-    var vis=getVisibleBranchIds();
-    var myBranch=branches.find(b=>vis&&vis[0]===b.id);
-    var rl={master:'총판',branch:'지사',sub:'지점'};
-    scopeLabel='🔒 '+(rl[role]||role)+' 시점'+(myBranch?' — '+myBranch.name:'')+' (산하 '+(vis?vis.length-1:0)+'개 조직만 표시)';
-  }
-  
-  var html='<div class="ph"><div><h1>대시보드</h1><p>'+scopeLabel+'</p></div><div><button class="btn btn-g" onclick="loadAllData().then(()=>{navigate(\'dashboard\');showToast(\'새로고침 완료\',\'success\');})">🔄 새로고침</button></div></div>';
+  var html='<div class="ph"><div><h1>대시보드</h1><p>Supabase 와 실시간 동기화</p></div><div><button class="btn btn-g" onclick="loadAllData().then(()=>{navigate(\'dashboard\');showToast(\'새로고침 완료\',\'success\');})">🔄 새로고침</button></div></div>';
   html+='<div class="sgrid sg4">'
   +'<div class="scard" style="cursor:pointer" onclick="navigate(\'members\')"><div class="scard-top"><div class="slabel">전체 회원'+(platform!=='all'?' ('+(platform==='toss'?'토스':'그랩')+')':'')+'</div><div class="sicon" style="background:rgba(41,128,185,.12);color:var(--blue)">👥</div></div><div class="sval">'+visMembers.length+'</div><div class="ssub">승인 '+appr+' / 대기 '+pend+'</div></div>'
   +'<div class="scard" style="cursor:pointer" onclick="memberFilter=\'pending\';navigate(\'members\')"><div class="scard-top"><div class="slabel">승인 대기</div><div class="sicon" style="background:rgba(240,180,41,.12);color:var(--accent)">⏳</div></div><div class="sval" style="color:var(--accent)">'+pend+'</div></div>'
