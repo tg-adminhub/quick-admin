@@ -447,6 +447,12 @@ tr:last-child td{border-bottom:none}tr:hover td{background:rgba(255,255,255,.015
   <div class="modal-box">
     <div class="mh"><div class="mt" id="notice-modal-title">공지 작성</div><button class="mc" onclick="closeModal('modal-notice')">×</button></div>
     <input type="hidden" id="notice-id" value="">
+    <div class="fg"><label class="fl">📍 대상 *</label>
+      <select class="fi2" id="notice-audience">
+        <option value="app">📱 앱 공지 (회원 — 토스/그랩 사용자)</option>
+        <option value="admin">🖥️ 어드민 공지 (관리자 — 어드민 사이트 사용자)</option>
+      </select>
+    </div>
     <div class="fg"><label class="fl">제목 *</label><input class="fi2" id="notice-title" placeholder="공지 제목"></div>
     <div class="fg"><label class="fl">카테고리</label>
       <select class="fi2" id="notice-category">
@@ -747,6 +753,7 @@ async function loadAllData(){
           platform:u.app_type||'toss',
           fee:DEV_FEE,
           main:false,
+          phone:d.phone_number,
           phone_number:d.phone_number
         }))
       )
@@ -827,7 +834,6 @@ function buildSidebar(){
       {s:'조직'},
       {p:'org-manage',ic:'tree',l:'지점 관리 (전체)'},
       {s:'운영'},
-      {p:'notices',ic:'bell',l:'공지사항'},
       {p:'accounts',ic:'key',l:'어드민 계정 관리'},
       {s:'설정'},
       {p:'settings',ic:'cog',l:'앱 설정'}
@@ -842,7 +848,6 @@ function buildSidebar(){
       {s:'조직'},
       {p:'my-orgs',ic:'tree',l:'지사/지점 관리'},
       {s:'운영'},
-      {p:'notices',ic:'bell',l:'공지사항'},
       {p:'accounts',ic:'key',l:'어드민 계정 관리'},
       {s:'설정'},
       {p:'my-settings',ic:'cog',l:'내 설정'}
@@ -1483,6 +1488,7 @@ function renderDevList(m){
       +(isMain?' <span style="font-size:9px;color:var(--accent);background:rgba(240,180,41,.15);padding:1px 5px;border-radius:3px;margin-left:3px">메인</span>':'')
       +(isPendingRemove?' <span style="font-size:9px;color:var(--red);background:rgba(231,76,60,.15);padding:1px 5px;border-radius:3px;margin-left:3px">⏳ 삭제 예정</span>':'')
       +'</div>'
+      +(d.phone?'<div style="font-size:11px;color:var(--accent);margin-top:2px;font-family:monospace">📞 '+d.phone+'</div>':'')
       +'</div>'
       +'</div>'
       +'<div style="display:flex;align-items:center;gap:6px">';
@@ -1507,6 +1513,7 @@ function renderDevList(m){
       +'<div><div style="font-size:12px;font-weight:600">'+pend.label
       +' <span style="font-size:9px;color:var(--green);background:rgba(46,204,113,.15);padding:1px 5px;border-radius:3px;margin-left:3px">⏳ 추가 예정</span>'
       +'</div>'
+      +(pend.phone?'<div style="font-size:11px;color:var(--accent);margin-top:2px;font-family:monospace">📞 '+pend.phone+'</div>':'')
       +'<div style="font-size:10px;color:var(--text3);margin-top:2px">📅 '+(pend.modeLabel||(pend.days>0?'+'+pend.days+'일':'만료일 유지'))+'</div>'
       +'</div></div>'
       +'<div style="display:flex;align-items:center;gap:6px">'
@@ -1975,14 +1982,42 @@ async function rejectP(id){
 // =====================================================================
 //   NOTICES — Supabase 연동
 // =====================================================================
+var noticeAudienceFilter='app';  // 현재 탭: 'app' 또는 'admin'
+
 function renderNotices(){
-  var html='<div class="ph"><div><h1>공지사항</h1><p>앱 사용자에게 실시간으로 전달됩니다</p></div><div><button class="btn btn-p" onclick="openNoticeModal()">+ 공지 작성</button></div></div>';
-  if(!notices.length){
-    html+='<div class="empty"><div class="empty-icon">📢</div><div class="empty-txt">아직 작성된 공지가 없습니다</div></div>';
+  // 권한별 작성 권한 — 개발자만
+  var canWrite=(role==='dev');
+  
+  var html='<div class="ph"><div><h1>공지사항</h1>'
+    +'<p>'+(canWrite?'개발자 전용 — 회원 앱 / 어드민 사이트 공지를 작성합니다':'관리자에게 전달된 공지를 확인할 수 있습니다')+'</p>'
+    +'</div><div>'
+    +(canWrite?'<button class="btn btn-p" onclick="openNoticeModal()">+ 공지 작성</button>':'')
+    +'</div></div>';
+  
+  // 탭 — 앱 공지 / 어드민 공지
+  html+='<div style="display:flex;gap:8px;margin-bottom:16px;border-bottom:1px solid var(--border);padding-bottom:0">'
+    +'<button onclick="setNoticeAudience(\'app\')" style="background:none;border:none;padding:10px 16px;font-size:13px;font-weight:600;cursor:pointer;color:'
+    +(noticeAudienceFilter==='app'?'var(--accent);border-bottom:2px solid var(--accent);margin-bottom:-1px':'var(--text2)')+'">📱 앱 공지 (회원용)</button>'
+    +'<button onclick="setNoticeAudience(\'admin\')" style="background:none;border:none;padding:10px 16px;font-size:13px;font-weight:600;cursor:pointer;color:'
+    +(noticeAudienceFilter==='admin'?'var(--accent);border-bottom:2px solid var(--accent);margin-bottom:-1px':'var(--text2)')+'">🖥️ 어드민 공지 (관리자용)</button>'
+    +'</div>';
+  
+  // 필터된 공지 목록
+  var filtered=notices.filter(n=>{
+    var aud=n.audience||'app';  // 기존 데이터는 app default
+    return aud===noticeAudienceFilter;
+  });
+  
+  if(!filtered.length){
+    html+='<div class="empty"><div class="empty-icon">📢</div><div class="empty-txt">'
+      +(noticeAudienceFilter==='app'?'앱 공지':'어드민 공지')+'가 없습니다</div></div>';
   }else{
-    html+='<div class="card" style="padding:0"><div class="card-head"><div class="card-title">공지 목록</div><span style="font-size:11px;color:var(--text2)">총 '+notices.length+'건</span></div>';
-    html+='<div class="tw"><table><thead><tr><th>제목</th><th>카테고리</th><th>상태</th><th>작성일</th><th>관리</th></tr></thead><tbody>';
-    notices.forEach(function(n){
+    html+='<div class="card" style="padding:0"><div class="card-head"><div class="card-title">'
+      +(noticeAudienceFilter==='app'?'📱 앱 공지':'🖥️ 어드민 공지')+' 목록</div>'
+      +'<span style="font-size:11px;color:var(--text2)">총 '+filtered.length+'건</span></div>';
+    html+='<div class="tw"><table><thead><tr><th>제목</th><th>카테고리</th><th>상태</th><th>작성일</th>'
+      +(canWrite?'<th>관리</th>':'')+'</tr></thead><tbody>';
+    filtered.forEach(function(n){
       var catBadge=n.category==='update'?'bg-blue':n.category==='event'?'bg-purple':'bg-yellow';
       var catLabel=n.category==='update'?'업데이트':n.category==='event'?'이벤트':'공지';
       html+='<tr>'
@@ -1990,18 +2025,26 @@ function renderNotices(){
       +'<td><span class="badge '+catBadge+'">'+catLabel+'</span></td>'
       +'<td>'+(n.is_published?'<span class="badge bg-green">게시중</span>':'<span class="badge bg-gray">미게시</span>')+'</td>'
       +'<td style="font-size:11px;color:var(--text2)">'+isoToFd(n.created_at)+'</td>'
-      +'<td><div style="display:flex;gap:4px"><button class="btn btn-g btn-sm" onclick="editNotice('+n.id+')">수정</button><button class="btn btn-d btn-sm" onclick="deleteNotice('+n.id+')">삭제</button></div></td></tr>';
+      +(canWrite?'<td><div style="display:flex;gap:4px"><button class="btn btn-g btn-sm" onclick="editNotice('+n.id+')">수정</button><button class="btn btn-d btn-sm" onclick="deleteNotice('+n.id+')">삭제</button></div></td>':'')
+      +'</tr>';
     });
     html+='</tbody></table></div></div>';
   }
   return html;
 }
 
+function setNoticeAudience(aud){
+  noticeAudienceFilter=aud;
+  navigate('notices');
+}
+
 function openNoticeModal(){
+  if(role!=='dev'){showToast('공지 작성은 개발자만 가능합니다','error');return;}
   document.getElementById('notice-id').value='';
   document.getElementById('notice-title').value='';
   document.getElementById('notice-content').value='';
   document.getElementById('notice-category').value='notice';
+  document.getElementById('notice-audience').value=noticeAudienceFilter;  // 현재 탭 기본
   document.getElementById('notice-pinned').checked=false;
   document.getElementById('notice-published').checked=true;
   document.getElementById('notice-modal-title').textContent='공지 작성';
@@ -2009,11 +2052,13 @@ function openNoticeModal(){
 }
 
 function editNotice(id){
+  if(role!=='dev'){showToast('공지 수정은 개발자만 가능합니다','error');return;}
   var n=notices.find(x=>x.id===id);if(!n)return;
   document.getElementById('notice-id').value=n.id;
   document.getElementById('notice-title').value=n.title;
   document.getElementById('notice-content').value=n.content;
   document.getElementById('notice-category').value=n.category||'notice';
+  document.getElementById('notice-audience').value=n.audience||'app';
   document.getElementById('notice-pinned').checked=!!n.is_pinned;
   document.getElementById('notice-published').checked=!!n.is_published;
   document.getElementById('notice-modal-title').textContent='공지 수정';
@@ -2021,15 +2066,17 @@ function editNotice(id){
 }
 
 async function saveNotice(){
+  if(role!=='dev'){showToast('공지 저장은 개발자만 가능합니다','error');return;}
   var id=document.getElementById('notice-id').value;
   var title=document.getElementById('notice-title').value.trim();
   var content=document.getElementById('notice-content').value.trim();
   var category=document.getElementById('notice-category').value;
+  var audience=document.getElementById('notice-audience').value;
   var pinned=document.getElementById('notice-pinned').checked;
   var published=document.getElementById('notice-published').checked;
   if(!title||!content){showToast('제목과 내용을 입력하세요','error');return;}
   try{
-    var payload={title:title,content:content,category:category,is_pinned:pinned,is_published:published,updated_at:new Date().toISOString()};
+    var payload={title:title,content:content,category:category,audience:audience,is_pinned:pinned,is_published:published,updated_at:new Date().toISOString()};
     var error;
     if(id){
       ({error}=await sb.from('announcements').update(payload).eq('id',id));
@@ -2040,6 +2087,7 @@ async function saveNotice(){
     closeModal('modal-notice');
     showToast(id?'공지 수정 완료':'공지 등록 완료','success');
     await loadAllData();
+    noticeAudienceFilter=audience;  // 작성한 탭으로 이동
     navigate('notices');
   }catch(e){
     showToast('저장 실패: '+e.message,'error');
@@ -2047,6 +2095,7 @@ async function saveNotice(){
 }
 
 async function deleteNotice(id){
+  if(role!=='dev'){showToast('공지 삭제는 개발자만 가능합니다','error');return;}
   if(!confirm('이 공지를 삭제하시겠습니까?'))return;
   try{
     const {error}=await sb.from('announcements').delete().eq('id',id);
@@ -2066,9 +2115,11 @@ function renderSettings(){
   var get=(k,d)=>appSettings[k]!==undefined?appSettings[k]:(d||'');
   var html='<div class="ph"><div><h1>앱 설정</h1><p>모든 설정은 즉시 앱에 반영됩니다</p></div><button class="btn btn-p" onclick="saveAppSettings()">저장</button></div>';
   
-  // 운영 설정
+  // 운영 설정 - 점검 모드 + 점검 메시지
   html+='<div class="ss"><div class="ssh"><div class="ssi" style="background:rgba(240,180,41,.12);color:var(--accent)">⚙️</div><div><div class="sst">운영 설정</div></div></div>'
-  +'<div class="trow"><div><div style="font-size:12px;font-weight:600">점검 모드</div><div style="font-size:11px;color:var(--text2)">활성화 시 기사 앱 차단</div></div><button class="toggle '+(get('maintenance_mode','false')==='true'?'on':'')+'" id="tog-maint" onclick="this.classList.toggle(\'on\')"></button></div></div>';
+  +'<div class="trow" style="border-bottom:1px solid var(--border);padding-bottom:12px;margin-bottom:12px"><div><div style="font-size:12px;font-weight:600">🔧 점검 모드</div><div style="font-size:11px;color:var(--text2)">활성화 시 회원 로그인 차단 + 안내 팝업 표시</div></div><button class="toggle '+(get('maintenance_mode','false')==='true'?'on':'')+'" id="tog-maint" onclick="this.classList.toggle(\'on\')"></button></div>'
+  +'<div class="fg" style="margin:0"><label class="fl">점검 안내 메시지 <span style="color:var(--text3);font-size:10px;font-weight:400">(점검 모드 ON 일 때 회원 앱에 표시되는 팝업 메시지)</span></label>'
+  +'<textarea class="fi2" id="set-maintmsg" rows="3" placeholder="예: 시스템 점검 중입니다.\n점검 시간: 오전 2시 ~ 4시\n이용에 불편을 드려 죄송합니다.">'+get('maintenance_message','시스템 점검 중입니다. 잠시 후 다시 이용해주세요.')+'</textarea></div></div>';
   
   // 결제 설정
   html+='<div class="ss"><div class="ssh"><div class="ssi" style="background:rgba(231,76,60,.12);color:var(--red)">💳</div><div><div class="sst">결제 설정</div></div></div>'
@@ -2078,17 +2129,12 @@ function renderSettings(){
   
   // 고객센터 — 지점별 텔레그램 안내
   html+='<div class="ss"><div class="ssh"><div class="ssi" style="background:rgba(142,68,173,.12);color:var(--purple)">📞</div><div><div class="sst">고객센터</div></div></div>'
-  +'<div class="alert a-blue" style="margin-bottom:12px;font-size:12px;line-height:1.6">'
-  +'<strong>📌 안내</strong><br>'
-  +'회원의 고객센터 문의는 <strong>본인 가입 지점의 텔레그램으로 자동 연결</strong>됩니다.<br>'
-  +'지점별 텔레그램 ID 는 <strong>지사/지점 관리</strong> 메뉴에서 각 조직마다 설정하세요.<br>'
-  +'<span style="color:var(--text3);font-size:11px">예: 회원이 "고양점" 으로 가입 → 고양점의 텔레그램으로 문의 연결</span>'
+  +'<div style="background:rgba(41,128,185,.08);border:1px solid rgba(41,128,185,.25);border-radius:7px;padding:14px;font-size:13px;line-height:1.7;color:var(--text)">'
+  +'<div style="font-weight:600;margin-bottom:8px">📌 안내</div>'
+  +'<div>회원의 고객센터 문의는 <strong style="color:var(--accent)">본인 가입 지점의 텔레그램</strong>으로 자동 연결됩니다.</div>'
+  +'<div style="margin-top:6px">지점별 텔레그램 ID 는 <strong>지사/지점 관리</strong> 메뉴에서 각 조직마다 설정하세요.</div>'
+  +'<div style="margin-top:8px;font-size:11px;color:var(--text3)">예: 회원이 "고양점" 으로 가입 → 고양점의 텔레그램으로 문의 연결</div>'
   +'</div></div>';
-  
-  // 메인 공지
-  html+='<div class="ss"><div class="ssh"><div class="ssi" style="background:rgba(46,204,113,.12);color:var(--green)">📢</div><div><div class="sst">메인 공지 (앱 시작 화면)</div></div></div>'
-  +'<div class="fg"><label class="fl">제목</label><input class="fi2" id="set-noticetitle" value="'+get('app_notice_title','')+'"></div>'
-  +'<div class="fg" style="margin:0"><label class="fl">내용</label><textarea class="fi2" id="set-noticecontent" rows="3">'+get('app_notice_content','')+'</textarea></div></div>';
   
   return html;
 }
@@ -2096,11 +2142,10 @@ function renderSettings(){
 async function saveAppSettings(){
   var pairs={
     maintenance_mode:document.getElementById('tog-maint').classList.contains('on')?'true':'false',
+    maintenance_message:document.getElementById('set-maintmsg').value,
     payment_visible:document.getElementById('tog-payvis').classList.contains('on')?'true':'false',
     payment_account:document.getElementById('set-payacc').value,
-    free_period_end:document.getElementById('set-freeend').value,
-    app_notice_title:document.getElementById('set-noticetitle').value,
-    app_notice_content:document.getElementById('set-noticecontent').value
+    free_period_end:document.getElementById('set-freeend').value
   };
   try{
     for(var k in pairs){
