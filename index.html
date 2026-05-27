@@ -4,6 +4,13 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>QUICK ADMIN</title>
+<!-- ★ PWA — 휴대폰 홈 화면에 추가하면 앱처럼 사용 가능 (2026.05.27) -->
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#0a0e1a">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Quick Admin">
+<link rel="apple-touch-icon" href="data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 192 192'><rect width='192' height='192' rx='32' fill='%23f0b429'/><text x='96' y='130' font-family='Arial Black,sans-serif' font-size='110' font-weight='900' fill='%23000' text-anchor='middle'>Q</text></svg>">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.0/chart.umd.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
@@ -979,7 +986,7 @@ function renderDash(){
   var totalRev=visPayments.filter(function(p){return p.status==='approved';}).reduce(function(a,b){return a+(b.amount||0);},0);
   var pendPay=visPayments.filter(function(p){return p.status==='pending';}).length;
   
-  var html='<div class="ph"><div><h1>대시보드</h1><p>Supabase 와 실시간 동기화</p></div><div><button class="btn btn-g" onclick="loadAllData().then(()=>{navigate(\'dashboard\');showToast(\'새로고침 완료\',\'success\');})">🔄 새로고침</button></div></div>';
+  var html='<div class="ph"><div><h1>대시보드</h1><p>실시간 동기화</p></div><div><button class="btn btn-g" onclick="loadAllData().then(()=>{navigate(\'dashboard\');showToast(\'새로고침 완료\',\'success\');})">🔄 새로고침</button></div></div>';
   html+='<div class="sgrid sg4">'
   +'<div class="scard" style="cursor:pointer" onclick="navigate(\'members\')"><div class="scard-top"><div class="slabel">전체 회원'+(platform!=='all'?' ('+(platform==='toss'?'토스':'그랩')+')':'')+'</div><div class="sicon" style="background:rgba(41,128,185,.12);color:var(--blue)">👥</div></div><div class="sval">'+visMembers.length+'</div><div class="ssub">승인 '+appr+' / 대기 '+pend+'</div></div>'
   +'<div class="scard" style="cursor:pointer" onclick="memberFilter=\'pending\';navigate(\'members\')"><div class="scard-top"><div class="slabel">승인 대기</div><div class="sicon" style="background:rgba(240,180,41,.12);color:var(--accent)">⏳</div></div><div class="sval" style="color:var(--accent)">'+pend+'</div></div>'
@@ -1064,7 +1071,7 @@ function renderMembers(){
   var sb_={approved:'bg-green',pending:'bg-yellow',rejected:'bg-red',suspended:'bg-gray'};
   var sl={approved:'승인',pending:'대기',rejected:'거절',suspended:'정지'};
   
-  var html='<div class="ph"><div><h1>회원 관리</h1><p>Supabase 와 실시간 동기화 — 총 '+visMembers.length+'명 (필터 적용: '+list.length+'명)</p></div><div style="display:flex;gap:6px"><button class="btn btn-p" onclick="openAddMember()">+ 회원 추가</button><button class="btn btn-g" onclick="loadAllData().then(()=>{navigate(\'members\');showToast(\'새로고침 완료\',\'success\');})">🔄 새로고침</button></div></div>';
+  var html='<div class="ph"><div><h1>회원 관리</h1><p>실시간 동기화 — 총 '+visMembers.length+'명 (필터 적용: '+list.length+'명)</p></div><div style="display:flex;gap:6px"><button class="btn btn-p" onclick="openAddMember()">+ 회원 추가</button><button class="btn btn-g" onclick="loadAllData().then(()=>{navigate(\'members\');showToast(\'새로고침 완료\',\'success\');})">🔄 새로고침</button></div></div>';
   
   // 검색 + 날짜 필터 바
   html+='<div class="card" style="padding:14px;margin-bottom:12px"><div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end">'
@@ -3164,6 +3171,17 @@ document.addEventListener('click',function(e){
     if(ov) ov.classList.remove('show');
   }
 });
+
+// ★ PWA — Service Worker 등록 (2026.05.27)
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('sw.js').then(() => {
+      console.log('[PWA] Service Worker 등록됨');
+    }).catch((err) => {
+      console.log('[PWA] Service Worker 등록 실패:', err);
+    });
+  });
+}
 </script>
 
 </body>
