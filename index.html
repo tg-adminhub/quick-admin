@@ -156,8 +156,10 @@ tr:last-child td{border-bottom:none}tr:hover td{background:rgba(255,255,255,.015
 .gci{display:flex;align-items:center;justify-content:space-between;padding:8px 10px;background:var(--bg4);border-radius:6px;margin-bottom:5px;flex-wrap:wrap;gap:4px}
 .cal-wrap{display:inline-block}
 .cal-inp{background:var(--bg3);border:1px solid var(--border);border-radius:7px;padding:7px 10px;color:var(--text);font-size:12px;cursor:pointer;width:120px;outline:none}
-.cal-dropdown{display:none;position:fixed;z-index:500;background:var(--bg2);border:1px solid var(--border);border-radius:10px;padding:12px;width:250px;box-shadow:0 8px 32px rgba(0,0,0,.7)}
+.cal-dropdown{display:none;position:fixed;z-index:500;background:var(--bg2);border:1px solid var(--border);border-radius:10px;padding:12px;width:280px;box-shadow:0 8px 32px rgba(0,0,0,.7)}
 .cal-dropdown.open{display:block}
+.cal-jump{flex:1;background:var(--bg3);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:4px 6px;font-size:12px;cursor:pointer;outline:none;font-family:inherit}
+.cal-jump:hover{border-color:var(--accent)}
 .cal-nav{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px}
 .cal-nb{background:none;border:1px solid var(--border);border-radius:5px;color:var(--text2);cursor:pointer;padding:3px 8px;font-size:12px}
 .cal-nb:hover{background:var(--bg3)}
@@ -1808,7 +1810,7 @@ function renderLicense(){
       +'<td style="font-size:11px">'+branchPath(m.branch_id,true)+'</td>'
       +'<td><span class="badge '+(m.plan==='free'?'bg-purple':'bg-green')+'">'+(m.plan==='free'?'무료':'유료')+'</span></td>'
       +'<td><button class="btn btn-b btn-sm" onclick="openDevModal('+m.id+')">📱 '+devCnt+'대 관리</button></td>'
-      +'<td style="min-width:140px"><div class="cal-wrap"><input class="cal-inp" id="exp-'+m.id+'" value="'+(m.expire||'')+'" placeholder="날짜 선택" readonly onclick="openCal('+m.id+')"><div class="cal-dropdown" id="cdd-'+m.id+'"></div></div></td>'
+      +'<td style="min-width:140px"><div class="cal-wrap"><input class="cal-inp" id="exp-'+m.id+'" value="'+(m.expire||'')+'" placeholder="YYYY.MM.DD" maxlength="10" onfocus="openCal('+m.id+')" oninput="handleDateInput('+m.id+',this)" onkeydown="if(event.key===\'Enter\'){event.preventDefault();applyTypedDate('+m.id+',this)}"><div class="cal-dropdown" id="cdd-'+m.id+'"></div></div></td>'
       +'<td>'+expBadge(m.expire)+'</td>'
       +'<td><div style="display:flex;gap:4px">'
       +((role==='dev'||role==='master')?'<button class="btn btn-g btn-sm" onclick="toggleFree('+m.id+')">'+(m.plan==='free'?'무료해제':'무료설정')+'</button>':'')
@@ -2134,7 +2136,7 @@ function openCal(mid){
     dd.classList.add('open');
     var rect=inp.getBoundingClientRect();
     var winH=window.innerHeight,winW=window.innerWidth;
-    var dropH=290,dropW=250;
+    var dropH=330,dropW=280;
     var top=rect.bottom+4;
     var left=rect.left;
     if(top+dropH>winH)top=rect.top-dropH-4;
@@ -2152,7 +2154,25 @@ function renderCal(mid){
   var firstDay=new Date(CAL.y,CAL.m,1).getDay();
   var daysInMonth=new Date(CAL.y,CAL.m+1,0).getDate();
   var ty=today.getFullYear(),tm=today.getMonth(),td=today.getDate();
-  var h='<div class="cal-nav"><button class="cal-nb" type="button" onclick="event.stopPropagation();calPrev('+mid+')">&#8249;</button><span class="cal-ml">'+CAL.y+'년 '+mn[CAL.m]+'</span><button class="cal-nb" type="button" onclick="event.stopPropagation();calNext('+mid+')">&#8250;</button></div><div class="cal-grid">';
+  
+  // ★ 년도 옵션 (현재 ±10년)
+  var yearOpts='';
+  for(var y=ty-3;y<=ty+10;y++){
+    yearOpts+='<option value="'+y+'"'+(y===CAL.y?' selected':'')+'>'+y+'년</option>';
+  }
+  // ★ 월 옵션
+  var monthOpts='';
+  for(var mi=0;mi<12;mi++){
+    monthOpts+='<option value="'+mi+'"'+(mi===CAL.m?' selected':'')+'>'+mn[mi]+'</option>';
+  }
+  
+  var h='<div class="cal-nav" style="gap:4px">'
+    +'<button class="cal-nb" type="button" onclick="event.stopPropagation();calPrev('+mid+')">&#8249;</button>'
+    +'<select class="cal-jump" onchange="event.stopPropagation();CAL.y=parseInt(this.value);renderCal('+mid+')">'+yearOpts+'</select>'
+    +'<select class="cal-jump" onchange="event.stopPropagation();CAL.m=parseInt(this.value);renderCal('+mid+')">'+monthOpts+'</select>'
+    +'<button class="cal-nb" type="button" onclick="event.stopPropagation();calNext('+mid+')">&#8250;</button>'
+    +'</div>'
+    +'<div class="cal-grid">';
   ['일','월','화','수','목','금','토'].forEach(function(d){h+='<div class="cal-dh">'+d+'</div>';});
   for(var i=0;i<firstDay;i++)h+='<div class="cal-d empty"></div>';
   for(var d=1;d<=daysInMonth;d++){
@@ -2163,7 +2183,46 @@ function renderCal(mid){
   h+='</div><div class="cal-presets">';
   [7,14,30,40,60,90].forEach(function(n){h+='<button class="cal-pre" type="button" onclick="event.stopPropagation();addDaysLic('+mid+','+n+')">+'+n+'일</button>';});
   h+='</div>';
+  // ★ 오늘로 점프
+  h+='<div style="display:flex;gap:6px;margin-top:8px"><button class="cal-pre" style="flex:1" type="button" onclick="event.stopPropagation();CAL.y=today.getFullYear();CAL.m=today.getMonth();renderCal('+mid+')">📅 오늘로</button></div>';
   dd.innerHTML=h;
+}
+
+// ★ 직접 타이핑 입력 — 자동 포맷 (YYYY.MM.DD)
+function handleDateInput(mid, inp){
+  var v=inp.value.replace(/[^0-9]/g,'');  // 숫자만
+  if(v.length>=5)v=v.substring(0,4)+'.'+v.substring(4);
+  if(v.length>=8)v=v.substring(0,7)+'.'+v.substring(7,9);
+  if(v.length>10)v=v.substring(0,10);
+  inp.value=v;
+  // 형식 완성 시 캘린더 갱신
+  if(/^\d{4}\.\d{2}\.\d{2}$/.test(v)){
+    var parts=v.split('.');
+    var y=parseInt(parts[0]),m=parseInt(parts[1])-1,d=parseInt(parts[2]);
+    if(y>=2020&&y<=2050&&m>=0&&m<=11&&d>=1&&d<=31){
+      CAL.y=y;CAL.m=m;
+      renderCal(mid);
+    }
+  }
+}
+
+// ★ Enter 키 — 입력된 날짜 적용
+async function applyTypedDate(mid, inp){
+  var v=inp.value.trim();
+  if(!/^\d{4}\.\d{2}\.\d{2}$/.test(v)){
+    showToast('형식이 올바르지 않습니다 (YYYY.MM.DD)','error');return;
+  }
+  var parts=v.split('.');
+  var y=parseInt(parts[0]),m=parseInt(parts[1]),d=parseInt(parts[2]);
+  if(y<2020||y>2050||m<1||m>12||d<1||d>31){
+    showToast('유효하지 않은 날짜입니다','error');return;
+  }
+  // 실제 유효한 날짜인지 (예: 2월 30일 차단)
+  var testD=new Date(y,m-1,d);
+  if(testD.getFullYear()!==y||testD.getMonth()!==m-1||testD.getDate()!==d){
+    showToast('존재하지 않는 날짜입니다','error');return;
+  }
+  pickDate(mid, v);
 }
 function calPrev(mid){CAL.m--;if(CAL.m<0){CAL.m=11;CAL.y--;}renderCal(mid);}
 function calNext(mid){CAL.m++;if(CAL.m>11){CAL.m=0;CAL.y++;}renderCal(mid);}
