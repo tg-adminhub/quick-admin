@@ -1810,7 +1810,8 @@ function renderLicense(){
       +'<td><button class="btn btn-b btn-sm" onclick="openDevModal('+m.id+')">📱 '+devCnt+'대 관리</button></td>'
       +'<td style="min-width:140px"><div class="cal-wrap"><input class="cal-inp" id="exp-'+m.id+'" value="'+(m.expire||'')+'" placeholder="날짜 선택" readonly onclick="openCal('+m.id+')"><div class="cal-dropdown" id="cdd-'+m.id+'"></div></div></td>'
       +'<td>'+expBadge(m.expire)+'</td>'
-      +'<td><div style="display:flex;gap:4px"><button class="btn btn-g btn-sm" onclick="toggleFree('+m.id+')">'+(m.plan==='free'?'무료해제':'무료설정')+'</button>'
+      +'<td><div style="display:flex;gap:4px">'
+      +((role==='dev'||role==='master')?'<button class="btn btn-g btn-sm" onclick="toggleFree('+m.id+')">'+(m.plan==='free'?'무료해제':'무료설정')+'</button>':'')
       +'<button class="btn btn-b btn-sm" onclick="showMember('+m.id+')">상세</button></div></td></tr>';
     });
     html+='</tbody></table></div>';
@@ -1820,13 +1821,22 @@ function renderLicense(){
 }
 
 async function toggleFree(id){
+  // ★ 권한 체크 — 무료 전환은 개발자/총판만 (악용 방지 2026.05.27)
+  if(role!=='dev' && role!=='master'){
+    showToast('무료 이용권 전환은 개발자/총판만 가능합니다','error');
+    return;
+  }
   var m=members.find(function(x){return x.id===id;});if(!m)return;
   var newPlan=!m.plan||m.plan!=='free';
+  if(!confirm((newPlan?'⚠️ 무료 이용자로 전환합니다':'무료 해제 → 유료로 전환합니다')
+    +'\n\n회원: '+(m.realName||m.username)
+    +(newPlan?'\n\n무료 이용자는 결제 없이 사용 가능합니다.\n악용 우려가 있으니 신중히 진행하세요.':'')
+    +'\n\n진행하시겠습니까?'))return;
   try{
     const {error}=await sb.from('users').update({is_free_user:newPlan}).eq('id',id);
     if(error)throw error;
     m.plan=newPlan?'free':'paid';
-    showToast('이용권 변경 완료','success');
+    showToast('이용권 변경 완료 ('+(newPlan?'무료':'유료')+')','success');
     navigate('license');
   }catch(e){
     showToast('변경 실패: '+e.message,'error');
