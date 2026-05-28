@@ -3073,6 +3073,23 @@ async function approveP(id, skipConfirm){
       await loadAllData();
       navigate('payment');
     }
+    
+    // ★ 결제 승인 텔레그램 알림 (2026.05.28)
+    try{
+      var expStr='';
+      if(m){
+        var exp=new Date(approvedAt.getTime()); exp.setDate(exp.getDate()+40);
+        expStr='\n새 만료일: '+isoToFd(exp.toISOString());
+      }
+      var notifyMsg='✅ 결제 승인 완료\n\n'
+        +'회원: '+(p.name||'-')+' (@'+(p.username||'-')+')\n'
+        +'금액: ₩'+(p.amount||0).toLocaleString()+'\n'
+        +(p.note?'입금자명: '+p.note+'\n':'')
+        +'처리자: '+(curAcc?curAcc.name+' (@'+curAcc.username+')':'-')
+        +expStr+'\n'
+        +'시각: '+new Date().toLocaleString('ko-KR');
+      sendAdminTelegram('approval', notifyMsg);
+    }catch(ignore){}
   }catch(e){
     if(!skipConfirm)showToast('승인 실패: '+e.message,'error');
     throw e;
@@ -3274,7 +3291,122 @@ function renderSettings(){
   +'<div style="margin-top:8px;font-size:11px;color:var(--text3)">예: 회원이 "고양점" 으로 가입 → 고양점의 텔레그램으로 문의 연결</div>'
   +'</div></div>';
   
+  // ★ 텔레그램 알림 (개발자 전용) — 2026.05.28
+  if(role==='dev'){
+    html+='<div class="ss"><div class="ssh"><div class="ssi" style="background:rgba(41,128,185,.12);color:var(--blue)">🔔</div><div><div class="sst">텔레그램 알림 (개발자 전용)</div></div></div>'
+    +'<div style="background:rgba(41,128,185,.06);border:1px solid rgba(41,128,185,.2);border-radius:7px;padding:12px;font-size:12px;line-height:1.6;color:var(--text2);margin-bottom:12px">'
+    +'회원가입 / 결제신청이 들어오면 텔레그램으로 즉시 알림을 받습니다. (어드민 로그인 불필요)<br>'
+    +'<span style="font-size:11px;color:var(--text3)">봇: @quickalert_noti_bot 에게 먼저 /start 를 눌러야 알림이 옵니다</span>'
+    +'</div>'
+    // 마스터 ON/OFF
+    +'<div class="trow" style="border-bottom:1px solid var(--border);padding-bottom:12px;margin-bottom:12px"><div><div style="font-size:12px;font-weight:600">🔔 알림 받기</div><div style="font-size:11px;color:var(--text2)">전체 알림 ON/OFF</div></div><button class="toggle '+(get('tg_notify_enabled','true')==='true'?'on':'')+'" id="tog-tgnotify" onclick="this.classList.toggle(\'on\')"></button></div>'
+    // 봇 토큰
+    +'<div class="fg"><label class="fl">봇 토큰 <span style="color:var(--text3);font-size:10px;font-weight:400">(@BotFather 에서 발급)</span></label>'
+    +'<input class="fi2" id="set-tgtoken" value="'+get('tg_bot_token','8691195736:AAHnSMkAr0VcwncKApttywpqlH57Syx9vjY')+'" placeholder="8691195736:AAH..." style="font-family:monospace;font-size:11px"></div>'
+    // 개발자 chat_id
+    +'<div class="fg"><label class="fl">개발자 chat_id <span style="color:var(--text3);font-size:10px;font-weight:400">(@userinfobot 에서 확인한 본인 Id 숫자)</span></label>'
+    +'<input class="fi2" id="set-tgchatid" value="'+get('tg_dev_chat_id','8146607464')+'" placeholder="8146607464" style="font-family:monospace"></div>'
+    // 알림 종류
+    +'<div class="fg"><label class="fl">알림 종류</label>'
+    +'<div style="display:flex;gap:8px;flex-wrap:wrap">'
+    +'<label style="flex:1;min-width:110px;background:var(--bg3);padding:10px;border-radius:7px;cursor:pointer;display:flex;align-items:center;gap:8px"><input type="checkbox" id="chk-tgsignup" '+(get('tg_notify_signup','true')==='true'?'checked':'')+'> <span style="font-size:13px">📝 회원가입</span></label>'
+    +'<label style="flex:1;min-width:110px;background:var(--bg3);padding:10px;border-radius:7px;cursor:pointer;display:flex;align-items:center;gap:8px"><input type="checkbox" id="chk-tgpayment" '+(get('tg_notify_payment','true')==='true'?'checked':'')+'> <span style="font-size:13px">💳 결제신청</span></label>'
+    +'<label style="flex:1;min-width:110px;background:var(--bg3);padding:10px;border-radius:7px;cursor:pointer;display:flex;align-items:center;gap:8px"><input type="checkbox" id="chk-tgapproval" '+(get('tg_notify_approval','true')==='true'?'checked':'')+'> <span style="font-size:13px">✅ 결제승인</span></label>'
+    +'</div></div>'
+    // 조용한 시간
+    +'<div class="fg"><label class="fl">🌙 조용한 시간 <span style="color:var(--text3);font-size:10px;font-weight:400">(이 시간대엔 알림 안 보냄, 비우면 항상 알림)</span></label>'
+    +'<div style="display:flex;gap:8px;align-items:center">'
+    +'<input type="time" class="fi2" id="set-tgquietstart" value="'+get('tg_quiet_start','')+'" style="width:130px">'
+    +'<span style="font-size:12px;color:var(--text3)">~</span>'
+    +'<input type="time" class="fi2" id="set-tgquietend" value="'+get('tg_quiet_end','')+'" style="width:130px">'
+    +'</div></div>'
+    // 테스트 전송
+    +'<div style="display:flex;gap:8px;margin-top:6px">'
+    +'<button class="btn btn-b btn-sm" onclick="testTelegramNotify()">📨 테스트 알림 보내기</button>'
+    +'<span style="font-size:11px;color:var(--text3);align-self:center">저장 후 테스트하세요</span>'
+    +'</div>'
+    +'</div>';
+    
+    // ★ 인앱 업데이트 (개발자 전용) — 2026.05.28
+    html+='<div class="ss"><div class="ssh"><div class="ssi" style="background:rgba(46,204,113,.12);color:var(--green)">🔄</div><div><div class="sst">앱 업데이트 (개발자 전용)</div></div></div>'
+    +'<div style="background:rgba(46,204,113,.06);border:1px solid rgba(46,204,113,.2);border-radius:7px;padding:12px;font-size:12px;line-height:1.6;color:var(--text2);margin-bottom:12px">'
+    +'새 APK 를 배포하면 <strong>버전 번호를 올리고</strong> 다운로드 링크를 입력하세요.<br>'
+    +'회원이 앱을 켤 때 현재 버전보다 높으면 <strong>"업데이트 있습니다"</strong> 팝업이 뜹니다.<br>'
+    +'<span style="font-size:11px;color:var(--text3)">현재 앱 버전: 16 (1.6.0) — 새 APK 빌드 시 이 숫자보다 크게 설정</span>'
+    +'</div>'
+    // 강제 업데이트 토글
+    +'<div class="trow" style="border-bottom:1px solid var(--border);padding-bottom:12px;margin-bottom:12px"><div><div style="font-size:12px;font-weight:600">🔒 강제 업데이트</div><div style="font-size:11px;color:var(--text2)">ON 시 업데이트 안 하면 앱 사용 불가 (건너뛰기 버튼 숨김)</div></div><button class="toggle '+(get('force_update','false')==='true'?'on':'')+'" id="tog-forceupd" onclick="this.classList.toggle(\'on\')"></button></div>'
+    // 토스
+    +'<div style="background:var(--bg3);border-radius:7px;padding:12px;margin-bottom:10px">'
+    +'<div style="font-size:13px;font-weight:600;margin-bottom:8px">🚗 토스 앱</div>'
+    +'<div class="fg"><label class="fl">최신 버전 번호 <span style="color:var(--text3);font-size:10px;font-weight:400">(versionCode 숫자)</span></label>'
+    +'<input class="fi2" id="set-tossver" value="'+get('toss_latest_version','16')+'" placeholder="16" inputmode="numeric"></div>'
+    +'<div class="fg" style="margin:0"><label class="fl">APK 다운로드 링크</label>'
+    +'<input class="fi2" id="set-tossapk" value="'+get('toss_apk_url','')+'" placeholder="https://t.me/... 또는 APK 직접 링크" style="font-size:11px"></div>'
+    +'</div>'
+    // 그랩
+    +'<div style="background:var(--bg3);border-radius:7px;padding:12px">'
+    +'<div style="font-size:13px;font-weight:600;margin-bottom:8px">🛵 그랩 앱</div>'
+    +'<div class="fg"><label class="fl">최신 버전 번호 <span style="color:var(--text3);font-size:10px;font-weight:400">(versionCode 숫자)</span></label>'
+    +'<input class="fi2" id="set-grabver" value="'+get('grab_latest_version','16')+'" placeholder="16" inputmode="numeric"></div>'
+    +'<div class="fg" style="margin:0"><label class="fl">APK 다운로드 링크</label>'
+    +'<input class="fi2" id="set-grabapk" value="'+get('grab_apk_url','')+'" placeholder="https://t.me/... 또는 APK 직접 링크" style="font-size:11px"></div>'
+    +'</div>'
+    +'</div>';
+  }
+  
   return html;
+}
+
+// ★ 어드민에서 텔레그램 알림 전송 (2026.05.28)
+//   notifyType: 'approval' (결제승인) 등. 조용한 시간 + 종류 체크
+async function sendAdminTelegram(notifyType, message){
+  try{
+    // ★ B방식 기본값 (DB 비어있어도 작동)
+    var enabled=(appSettings['tg_notify_enabled']||'true');
+    var token=(appSettings['tg_bot_token']||'').trim()||'8691195736:AAHnSMkAr0VcwncKApttywpqlH57Syx9vjY';
+    var chatId=(appSettings['tg_dev_chat_id']||'').trim()||'8146607464';
+    if(enabled!=='true'||!token||!chatId)return;
+    if(notifyType==='approval' && (appSettings['tg_notify_approval']||'true')!=='true')return;
+    // 조용한 시간 체크
+    var qs=appSettings['tg_quiet_start']||'', qe=appSettings['tg_quiet_end']||'';
+    if(qs&&qe){
+      var now=new Date();
+      var nowMin=now.getHours()*60+now.getMinutes();
+      var sp=qs.split(':'), ep=qe.split(':');
+      var startMin=parseInt(sp[0])*60+parseInt(sp[1]);
+      var endMin=parseInt(ep[0])*60+parseInt(ep[1]);
+      var inQuiet = startMin<=endMin ? (nowMin>=startMin&&nowMin<endMin) : (nowMin>=startMin||nowMin<endMin);
+      if(inQuiet)return;
+    }
+    var url='https://api.telegram.org/bot'+token+'/sendMessage';
+    await fetch(url,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({chat_id:chatId,text:message})});
+  }catch(e){console.warn('sendAdminTelegram:',e);}
+}
+
+// ★ 테스트 텔레그램 알림 (개발자 전용)
+async function testTelegramNotify(){
+  if(role!=='dev'){showToast('개발자만 가능합니다','error');return;}
+  var token=(appSettings['tg_bot_token']||'').trim()||'8691195736:AAHnSMkAr0VcwncKApttywpqlH57Syx9vjY';
+  var chatId=(appSettings['tg_dev_chat_id']||'').trim()||'8146607464';
+  if(!token||!chatId){showToast('봇 토큰과 chat_id 를 먼저 입력하고 저장하세요','error');return;}
+  try{
+    var msg='✅ Quick Admin 테스트 알림\n\n이 메시지가 보이면 알림 설정이 정상입니다.\n시각: '+new Date().toLocaleString('ko-KR');
+    var url='https://api.telegram.org/bot'+token+'/sendMessage';
+    const resp=await fetch(url,{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({chat_id:chatId, text:msg})
+    });
+    const data=await resp.json();
+    if(data.ok){
+      showToast('✅ 테스트 알림 전송 성공! 텔레그램을 확인하세요','success');
+    }else{
+      showToast('전송 실패: '+(data.description||'봇에 /start 를 눌렀는지 확인'),'error');
+    }
+  }catch(e){
+    showToast('전송 실패: '+e.message,'error');
+  }
 }
 
 async function saveAppSettings(){
@@ -3285,6 +3417,23 @@ async function saveAppSettings(){
     payment_account:document.getElementById('set-payacc').value,
     free_period_end:document.getElementById('set-freeend').value
   };
+  // ★ 텔레그램 알림 설정 (dev 만)
+  if(role==='dev'){
+    if(document.getElementById('tog-tgnotify'))pairs.tg_notify_enabled=document.getElementById('tog-tgnotify').classList.contains('on')?'true':'false';
+    if(document.getElementById('set-tgtoken'))pairs.tg_bot_token=document.getElementById('set-tgtoken').value.trim();
+    if(document.getElementById('set-tgchatid'))pairs.tg_dev_chat_id=document.getElementById('set-tgchatid').value.trim();
+    if(document.getElementById('chk-tgsignup'))pairs.tg_notify_signup=document.getElementById('chk-tgsignup').checked?'true':'false';
+    if(document.getElementById('chk-tgpayment'))pairs.tg_notify_payment=document.getElementById('chk-tgpayment').checked?'true':'false';
+    if(document.getElementById('chk-tgapproval'))pairs.tg_notify_approval=document.getElementById('chk-tgapproval').checked?'true':'false';
+    if(document.getElementById('set-tgquietstart'))pairs.tg_quiet_start=document.getElementById('set-tgquietstart').value;
+    if(document.getElementById('set-tgquietend'))pairs.tg_quiet_end=document.getElementById('set-tgquietend').value;
+    // ★ 인앱 업데이트
+    if(document.getElementById('tog-forceupd'))pairs.force_update=document.getElementById('tog-forceupd').classList.contains('on')?'true':'false';
+    if(document.getElementById('set-tossver'))pairs.toss_latest_version=document.getElementById('set-tossver').value.trim();
+    if(document.getElementById('set-tossapk'))pairs.toss_apk_url=document.getElementById('set-tossapk').value.trim();
+    if(document.getElementById('set-grabver'))pairs.grab_latest_version=document.getElementById('set-grabver').value.trim();
+    if(document.getElementById('set-grabapk'))pairs.grab_apk_url=document.getElementById('set-grabapk').value.trim();
+  }
   try{
     for(var k in pairs){
       const {error}=await sb.from('app_settings').upsert({key:k,value:pairs[k],updated_at:new Date().toISOString()},{onConflict:'key'});
