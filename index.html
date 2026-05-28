@@ -600,6 +600,9 @@ var memberDateFrom=null, memberDateTo=null;
 var licenseDateFrom=null, licenseDateTo=null;
 var licenseExpireOnly=false;  // 3일내 만료 모드
 var revDateFrom=null, revDateTo=null;
+// ★ 소속(지점) 필터 — 회원관리/이용권관리 (2026.05.28)
+var memberBranchFilter='all';   // 'all' 또는 branch_id
+var licenseBranchFilter='all';
 var revDrillNode=null;  // 매출 페이지 — 드릴다운한 지점 id
 
 // 날짜 헬퍼
@@ -661,6 +664,55 @@ function memberIsVisible(m){
   if(vis===null)return true;  // dev 시점 — 모두 보임
   if(m.branch_id==null)return false;
   return vis.indexOf(m.branch_id)>=0;
+}
+
+// ★ 소속 필터 드롭다운 HTML 생성 (본인 권한 내 조직만) — 2026.05.28
+function buildBranchFilterSelect(selId, currentVal, onChangeFn){
+  var vis=getVisibleBranchIds();  // 본인 산하 (dev=null=전체)
+  var visBranches = vis===null ? branches : branches.filter(b=>vis.indexOf(b.id)>=0);
+  var opts='<option value="all"'+(currentVal==='all'?' selected':'')+'>📋 전체 소속</option>';
+  var masters=visBranches.filter(b=>b.type==='master');
+  masters.forEach(function(mb){
+    opts+='<option value="'+mb.id+'"'+(String(currentVal)===String(mb.id)?' selected':'')+'>🏢 '+mb.name+'</option>';
+    visBranches.filter(b=>b.type==='branch'&&b.parent_id===mb.id).forEach(function(br){
+      opts+='<option value="'+br.id+'"'+(String(currentVal)===String(br.id)?' selected':'')+'>　└ 🏬 '+br.name+'</option>';
+      visBranches.filter(b=>b.type==='sub'&&b.parent_id===br.id).forEach(function(sb_){
+        opts+='<option value="'+sb_.id+'"'+(String(currentVal)===String(sb_.id)?' selected':'')+'>　　└ 📍 '+sb_.name+'</option>';
+      });
+    });
+    visBranches.filter(b=>b.type==='sub'&&b.parent_id===mb.id).forEach(function(sb_){
+      opts+='<option value="'+sb_.id+'"'+(String(currentVal)===String(sb_.id)?' selected':'')+'>　└ 📍 '+sb_.name+'</option>';
+    });
+  });
+  // 총판이 본인 vis 에 없는 경우 (지사로 로그인 등) — 지사 단독 표시
+  visBranches.filter(b=>b.type==='branch'&&!masters.find(m=>m.id===b.parent_id)).forEach(function(br){
+    opts+='<option value="'+br.id+'"'+(String(currentVal)===String(br.id)?' selected':'')+'>🏬 '+br.name+'</option>';
+    visBranches.filter(b=>b.type==='sub'&&b.parent_id===br.id).forEach(function(sb_){
+      opts+='<option value="'+sb_.id+'"'+(String(currentVal)===String(sb_.id)?' selected':'')+'>　└ 📍 '+sb_.name+'</option>';
+    });
+  });
+  // 지점 단독 (부모가 vis 에 없는 경우)
+  visBranches.filter(b=>b.type==='sub'&&!visBranches.find(p=>p.id===b.parent_id)).forEach(function(sb_){
+    opts+='<option value="'+sb_.id+'"'+(String(currentVal)===String(sb_.id)?' selected':'')+'>📍 '+sb_.name+'</option>';
+  });
+  return '<select class="fi2" id="'+selId+'" onchange="'+onChangeFn+'">'+opts+'</select>';
+}
+
+// ★ 선택된 소속 필터 매칭 — 선택 조직 + 그 산하 모두 포함
+function matchBranchFilter(memberBranchId, filterVal){
+  if(filterVal==='all')return true;
+  if(memberBranchId==null)return false;
+  var fid=parseInt(filterVal);
+  if(memberBranchId===fid)return true;
+  // 부모 체인 따라 올라가며 fid 일치 검사 (지사 선택 → 산하 지점도 포함)
+  var cur=branches.find(x=>x.id===memberBranchId);
+  var depth=0;
+  while(cur && depth<6){
+    if(cur.id===fid)return true;
+    cur=cur.parent_id?branches.find(x=>x.id===cur.parent_id):null;
+    depth++;
+  }
+  return false;
 }
 
 // ★ 회원 소속 조직 경로 표시 헬퍼 (지점 → 지사 → 총판)
@@ -1484,6 +1536,8 @@ function renderMembers(){
   // 가입일 필터
   var list=visMembers.filter(function(m){
     if(memberFilter!=='all'&&m.status!==memberFilter)return false;
+    // ★ 소속 필터
+    if(!matchBranchFilter(m.branch_id, memberBranchFilter))return false;
     // 검색
     if(memberSearch){
       var q=memberSearch.toLowerCase();
@@ -1514,7 +1568,8 @@ function renderMembers(){
     +'<div style="flex:1;min-width:200px"><label class="fl">🔍 회원 이름/아이디/전화 검색</label><input class="fi2" id="member-search" value="'+(memberSearch||'').replace(/"/g,'&quot;')+'" placeholder="이름, 아이디, 전화번호..." oninput="memberSearch=this.value;clearTimeout(window.__msTimer);window.__msTimer=setTimeout(()=>navigate(\'members\'),300)"></div>'
     +'<div><label class="fl">📅 가입일 시작</label><input class="fi2" type="date" id="member-from" value="'+(memberDateFrom?fdToIsoDate(memberDateFrom):'')+'" onchange="memberDateFrom=this.value?new Date(this.value):null;navigate(\'members\')" style="width:160px"></div>'
     +'<div><label class="fl">~ 종료</label><input class="fi2" type="date" id="member-to" value="'+(memberDateTo?fdToIsoDate(memberDateTo):'')+'" onchange="memberDateTo=this.value?new Date(this.value):null;navigate(\'members\')" style="width:160px"></div>'
-    +'<button class="btn btn-g btn-sm" onclick="memberSearch=\'\';memberDateFrom=null;memberDateTo=null;navigate(\'members\')">초기화</button>'
+    +'<div style="min-width:200px"><label class="fl">🏢 소속별 보기</label>'+buildBranchFilterSelect('member-branch-filter', memberBranchFilter, "memberBranchFilter=this.value;navigate('members')")+'</div>'
+    +'<button class="btn btn-g btn-sm" onclick="memberSearch=\'\';memberDateFrom=null;memberDateTo=null;memberBranchFilter=\'all\';navigate(\'members\')">초기화</button>'
     +'<button class="btn btn-g btn-sm" onclick="memberDateFrom=lastNDaysStart(7);memberDateTo=new Date();navigate(\'members\')">최근 7일</button>'
     +'<button class="btn btn-g btn-sm" onclick="memberDateFrom=lastNDaysStart(30);memberDateTo=new Date();navigate(\'members\')">최근 30일</button>'
     +'<button class="btn btn-g btn-sm" onclick="memberDateFrom=thisMonthStart();memberDateTo=thisMonthEnd();navigate(\'members\')">이번 달</button>'
@@ -1808,6 +1863,8 @@ function renderLicense(){
       var hit=(m.name&&m.name.toLowerCase().indexOf(q)>=0)||(m.username&&m.username.toLowerCase().indexOf(q)>=0)||(m.phone&&m.phone.indexOf(q)>=0);
       if(!hit)return false;
     }
+    // ★ 소속 필터
+    if(!matchBranchFilter(m.branch_id, licenseBranchFilter))return false;
     // 만료일 범위
     if(licenseDateFrom||licenseDateTo){
       if(!m.expire)return false;
@@ -1833,7 +1890,8 @@ function renderLicense(){
     +'<div style="flex:1;min-width:200px"><label class="fl">🔍 회원 이름/아이디/전화 검색</label><input class="fi2" id="lic-search" value="'+(licenseSearch||'').replace(/"/g,'&quot;')+'" placeholder="이름, 아이디, 전화..." oninput="licenseSearch=this.value;clearTimeout(window.__lsTimer);window.__lsTimer=setTimeout(()=>navigate(\'license\'),300)"></div>'
     +'<div><label class="fl">📅 만료일 시작</label><input class="fi2" type="date" id="lic-from" value="'+(licenseDateFrom?fdToIsoDate(licenseDateFrom):'')+'" onchange="licenseDateFrom=this.value?new Date(this.value):null;navigate(\'license\')" style="width:160px"></div>'
     +'<div><label class="fl">~ 종료</label><input class="fi2" type="date" id="lic-to" value="'+(licenseDateTo?fdToIsoDate(licenseDateTo):'')+'" onchange="licenseDateTo=this.value?new Date(this.value):null;navigate(\'license\')" style="width:160px"></div>'
-    +'<button class="btn btn-g btn-sm" onclick="licenseSearch=\'\';licenseDateFrom=null;licenseDateTo=null;licenseExpireOnly=false;navigate(\'license\')">초기화</button>'
+    +'<div style="min-width:200px"><label class="fl">🏢 소속별 보기</label>'+buildBranchFilterSelect('lic-branch-filter', licenseBranchFilter, "licenseBranchFilter=this.value;navigate('license')")+'</div>'
+    +'<button class="btn btn-g btn-sm" onclick="licenseSearch=\'\';licenseDateFrom=null;licenseDateTo=null;licenseExpireOnly=false;licenseBranchFilter=\'all\';navigate(\'license\')">초기화</button>'
     +'</div>'
     +(licenseExpireOnly?'<div class="alert a-red" style="margin-top:10px;margin-bottom:0">⏰ <strong>3일 내 만료 회원만</strong> 표시 중 — 카드 다시 클릭 시 해제</div>':'')
     +'</div>';
