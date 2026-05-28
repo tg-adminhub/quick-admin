@@ -370,6 +370,51 @@ tr:last-child td{border-bottom:none}tr:hover td{background:rgba(255,255,255,.015
   </div>
 </div>
 
+<!-- TEST MEMBER MODAL (개발자 전용) -->
+<div class="modal-bg" id="modal-add-test">
+  <div class="modal-box">
+    <div class="mh"><div class="mt">⚡ 테스트 회원 추가</div><button class="mc" onclick="closeModal('modal-add-test')">×</button></div>
+    <div class="alert a-blue">🧪 회원이 앱을 체험할 수 있도록 간단한 테스트 계정을 생성합니다.<br><span style="font-size:11px;color:var(--text3)">주민번호/전화번호 없이 ID + 비밀번호만 입력. 자동으로 무료 + 승인 상태로 생성됨</span></div>
+    
+    <div class="fg"><label class="fl">아이디 * <span style="color:var(--text3);font-size:10px;font-weight:400">(영문/숫자/언더바, 4자 이상)</span></label>
+      <input class="fi2" id="at-username" placeholder="예: test1, demo_kim"></div>
+    
+    <div class="fg"><label class="fl">비밀번호 * <span style="color:var(--text3);font-size:10px;font-weight:400">(4자 이상)</span></label>
+      <input class="fi2" id="at-password" type="text" placeholder="예: 1234, test1234"></div>
+    
+    <div class="fg"><label class="fl">표시 이름 <span style="color:var(--text3);font-size:10px;font-weight:400">(생략 시 아이디로 자동 설정)</span></label>
+      <input class="fi2" id="at-name" placeholder="예: 테스트유저1"></div>
+    
+    <div class="fg"><label class="fl">📱 사용 앱 *</label>
+      <div style="display:flex;gap:8px">
+        <label style="flex:1;background:var(--bg3);padding:10px;border-radius:7px;cursor:pointer;display:flex;align-items:center;gap:8px"><input type="radio" name="at-app" value="toss" checked> <span style="font-size:13px">🚗 토스</span></label>
+        <label style="flex:1;background:var(--bg3);padding:10px;border-radius:7px;cursor:pointer;display:flex;align-items:center;gap:8px"><input type="radio" name="at-app" value="grab"> <span style="font-size:13px">🛵 그랩</span></label>
+      </div>
+    </div>
+    
+    <div class="fg"><label class="fl">📍 소속 지점 *</label>
+      <select class="fi2" id="at-branch"><option value="">— 지점 선택 —</option></select>
+    </div>
+    
+    <div class="fg" style="margin:0"><label class="fl">⏰ 만료일 <span style="color:var(--text3);font-size:10px;font-weight:400">(기본: 7일 후)</span></label>
+      <select class="fi2" id="at-expire">
+        <option value="1">1일 후</option>
+        <option value="3">3일 후</option>
+        <option value="7" selected>7일 후</option>
+        <option value="14">14일 후</option>
+        <option value="30">30일 후</option>
+        <option value="90">90일 후</option>
+        <option value="365">1년 후 (장기 테스트)</option>
+      </select>
+    </div>
+    
+    <div style="display:flex;gap:8px;margin-top:14px">
+      <button class="btn btn-g" style="flex:1" onclick="closeModal('modal-add-test')">취소</button>
+      <button class="btn btn-p" style="flex:1" onclick="saveTestMember()">⚡ 테스트 회원 생성</button>
+    </div>
+  </div>
+</div>
+
 <!-- CREATE ADMIN ACCOUNT MODAL -->
 <div class="modal-bg" id="modal-create-account">
   <div class="modal-box">
@@ -969,8 +1014,6 @@ function buildSidebar(){
       {p:'accounts',ic:'key',l:'어드민 계정 관리'},
       {s:'가이드'},
       {p:'guide-admin',ic:'book',l:'어드민 앱 설치'},
-      {p:'guide-toss',ic:'book',l:'토스 앱 설치'},
-      {p:'guide-grab',ic:'book',l:'그랩 앱 설치'},
       {s:'설정'},
       {p:'settings',ic:'cog',l:'앱 설정'}
     ],
@@ -987,8 +1030,6 @@ function buildSidebar(){
       {p:'accounts',ic:'key',l:'어드민 계정 관리'},
       {s:'가이드'},
       {p:'guide-admin',ic:'book',l:'어드민 앱 설치'},
-      {p:'guide-toss',ic:'book',l:'토스 앱 설치'},
-      {p:'guide-grab',ic:'book',l:'그랩 앱 설치'},
       {s:'설정'},
       {p:'my-settings',ic:'cog',l:'내 설정'}
     ],
@@ -1003,8 +1044,6 @@ function buildSidebar(){
       {p:'my-orgs',ic:'tree',l:'지점 관리'},
       {s:'가이드'},
       {p:'guide-admin',ic:'book',l:'어드민 앱 설치'},
-      {p:'guide-toss',ic:'book',l:'토스 앱 설치'},
-      {p:'guide-grab',ic:'book',l:'그랩 앱 설치'},
       {s:'설정'},
       {p:'my-settings',ic:'cog',l:'내 설정'}
     ],
@@ -1017,8 +1056,6 @@ function buildSidebar(){
       {p:'revenue',ic:'chart',l:'내 매출'},
       {s:'가이드'},
       {p:'guide-admin',ic:'book',l:'어드민 앱 설치'},
-      {p:'guide-toss',ic:'book',l:'토스 앱 설치'},
-      {p:'guide-grab',ic:'book',l:'그랩 앱 설치'},
       {s:'설정'},
       {p:'my-settings',ic:'cog',l:'내 설정'}
     ]
@@ -1466,7 +1503,11 @@ function renderMembers(){
   var sb_={approved:'bg-green',pending:'bg-yellow',rejected:'bg-red',suspended:'bg-gray'};
   var sl={approved:'승인',pending:'대기',rejected:'거절',suspended:'정지'};
   
-  var html='<div class="ph"><div><h1>회원 관리</h1><p>실시간 동기화 — 총 '+visMembers.length+'명 (필터 적용: '+list.length+'명)</p></div><div style="display:flex;gap:6px"><button class="btn btn-p" onclick="openAddMember()">+ 회원 추가</button><button class="btn btn-g" onclick="loadAllData().then(()=>{navigate(\'members\');showToast(\'새로고침 완료\',\'success\');})">🔄 새로고침</button></div></div>';
+  var html='<div class="ph"><div><h1>회원 관리</h1><p>실시간 동기화 — 총 '+visMembers.length+'명 (필터 적용: '+list.length+'명)</p></div><div style="display:flex;gap:6px;flex-wrap:wrap">'
+    +'<button class="btn btn-p" onclick="openAddMember()">+ 회원 추가</button>'
+    +(role==='dev'?'<button class="btn btn-b" onclick="openAddTestMember()">⚡ 테스트 회원</button>':'')
+    +'<button class="btn btn-g" onclick="loadAllData().then(()=>{navigate(\'members\');showToast(\'새로고침 완료\',\'success\');})">🔄 새로고침</button>'
+    +'</div></div>';
   
   // 검색 + 날짜 필터 바
   html+='<div class="card" style="padding:14px;margin-bottom:12px"><div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end">'
@@ -3802,6 +3843,98 @@ function onAddMemberBranchChange(){}
 
 // 헬퍼 - 모달 열기
 function openModalHelper(id){document.getElementById(id).classList.add('open');}
+
+// ★ 테스트 회원 추가 모달 열기 (개발자 전용) — 2026.05.27
+function openAddTestMember(){
+  if(role!=='dev'){showToast('테스트 회원 추가는 개발자만 가능합니다','error');return;}
+  
+  // 입력 초기화
+  document.getElementById('at-username').value='';
+  document.getElementById('at-password').value='1234';
+  document.getElementById('at-name').value='';
+  document.getElementById('at-expire').value='7';
+  document.querySelector('input[name="at-app"][value="toss"]').checked=true;
+  
+  // 지점 select 채우기 — 모든 지점 (sub) + 지사 (branch)
+  var branchSel=document.getElementById('at-branch');
+  var visBranches=branches.filter(b=>b.type==='sub'||b.type==='branch'||b.type==='master');
+  var opts='<option value="">— 소속 조직 선택 —</option>';
+  var masters=visBranches.filter(b=>b.type==='master');
+  masters.forEach(function(mb){
+    opts+='<option value="'+mb.id+'">🏢 '+mb.name+'</option>';
+    visBranches.filter(b=>b.type==='branch'&&b.parent_id===mb.id).forEach(function(br){
+      opts+='<option value="'+br.id+'"> └ 🏬 '+br.name+'</option>';
+      visBranches.filter(b=>b.type==='sub'&&b.parent_id===br.id).forEach(function(sb_){
+        opts+='<option value="'+sb_.id+'">     └ 📍 '+sb_.name+'</option>';
+      });
+    });
+    visBranches.filter(b=>b.type==='sub'&&b.parent_id===mb.id).forEach(function(sb_){
+      opts+='<option value="'+sb_.id+'"> └ 📍 '+sb_.name+' (총판 직속)</option>';
+    });
+  });
+  branchSel.innerHTML=opts;
+  
+  document.getElementById('modal-add-test').classList.add('open');
+}
+
+// ★ 테스트 회원 생성 — 주민/전화 자동 더미값 + 즉시 승인 + 무료
+async function saveTestMember(){
+  if(role!=='dev'){showToast('테스트 회원 추가는 개발자만 가능합니다','error');return;}
+  
+  var uname=document.getElementById('at-username').value.trim();
+  var pw=document.getElementById('at-password').value;
+  var name=document.getElementById('at-name').value.trim();
+  var app=document.querySelector('input[name="at-app"]:checked').value;
+  var bid=document.getElementById('at-branch').value;
+  var expDays=parseInt(document.getElementById('at-expire').value||'7');
+  
+  if(!uname||uname.length<4){showToast('아이디는 4자 이상이어야 합니다','error');return;}
+  if(!/^[a-zA-Z0-9_]+$/.test(uname)){showToast('아이디는 영문/숫자/언더바만 사용 가능합니다','error');return;}
+  if(!pw||pw.length<4){showToast('비밀번호는 4자 이상이어야 합니다','error');return;}
+  if(!bid){showToast('소속 조직을 선택하세요','error');return;}
+  
+  // 표시 이름 기본값 = 아이디
+  if(!name)name='[테스트] '+uname;
+  
+  try{
+    // 중복 체크
+    const {data:existing}=await sb.from('users').select('id').eq('username',uname).maybeSingle();
+    if(existing){showToast('이미 사용 중인 아이디입니다','error');return;}
+    
+    const hashedPw=await sha256(pw);
+    
+    // 만료일 계산
+    var expDate=new Date();
+    expDate.setDate(expDate.getDate()+expDays);
+    
+    // ★ 더미 값 자동 채움 — 주민번호 / 전화번호
+    //   주민번호: 0000001 (앞6+뒷1=7자, 필드 형식 통과)
+    //   전화: 00000000000 (테스트용 더미)
+    const payload={
+      username:uname,
+      password:hashedPw,
+      real_name:name,
+      resident_num:'0000001',  // 더미
+      phone:'00000000000',  // 더미
+      branch_id:parseInt(bid),
+      status:'approved',  // 즉시 승인
+      is_free_user:true,  // 무료
+      app_type:app,
+      license_expires_at:expDate.toISOString(),
+      memo:'⚡ 테스트 계정 (개발자 생성, 주민/전화 더미) — 생성일: '+new Date().toLocaleString('ko-KR')
+    };
+    
+    const {error}=await sb.from('users').insert(payload);
+    if(error)throw error;
+    
+    closeModal('modal-add-test');
+    showToast('⚡ 테스트 회원 생성 완료\n아이디: '+uname+' / 비번: '+pw+' / 앱: '+(app==='grab'?'그랩':'토스')+'\n만료: '+expDays+'일 후','success');
+    await loadAllData();
+    navigate('members');
+  }catch(e){
+    showToast('테스트 회원 생성 실패: '+e.message,'error');
+  }
+}
 
 async function saveAddMember(){
   var app=document.getElementById('am-app').value;
