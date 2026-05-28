@@ -2464,7 +2464,7 @@ async function cleanupOldPayments(){
   }
 }
 
-// ★ 개발자 전용 — 결제관리 엑셀 다운로드 (현재 필터 적용된 결과)
+// ★ 개발자 전용 — 결제관리 엑셀 다운로드 (현재 필터 적용된 결과 + 요약)
 function exportPaymentExcel(){
   if(role!=='dev'){showToast('엑셀 다운로드는 개발자만 가능합니다','error');return;}
   if(typeof XLSX==='undefined'){showToast('엑셀 라이브러리 로드 실패. 새로고침 해주세요','error');return;}
@@ -2500,7 +2500,39 @@ function exportPaymentExcel(){
   
   if(list.length===0){showToast('다운로드할 데이터가 없습니다','info');return;}
   
-  // 시트 데이터 (객체 배열 → 자동으로 첫 행이 헤더)
+  // 통계 계산
+  var apprList=list.filter(p=>p.status==='approved');
+  var rejList=list.filter(p=>p.status==='rejected');
+  var pendList=list.filter(p=>p.status==='pending');
+  var totalRev=apprList.reduce((s,p)=>s+(p.amount||0),0);
+  var totalRej=rejList.reduce((s,p)=>s+(p.amount||0),0);
+  var totalPend=pendList.reduce((s,p)=>s+(p.amount||0),0);
+  
+  // 시트 1: 📊 요약
+  var summaryRows=[
+    ['📊 결제관리 다운로드 요약',''],
+    ['',''],
+    ['생성일시', new Date().toLocaleString('ko-KR')],
+    ['필터 상태', payFilter==='all'?'전체':payFilter==='pending'?'대기':payFilter==='approved'?'승인':'거절'],
+    ['검색어', paySearch||'(없음)'],
+    ['시작일', payDateFrom||'(없음)'],
+    ['종료일', payDateTo||'(없음)'],
+    ['',''],
+    ['━━━ 결제 건수 ━━━',''],
+    ['총 건수', list.length+' 건'],
+    ['  └ 승인', apprList.length+' 건'],
+    ['  └ 거절', rejList.length+' 건'],
+    ['  └ 대기', pendList.length+' 건'],
+    ['',''],
+    ['━━━ 매출 금액 ━━━',''],
+    ['총 매출 (승인 분)', '₩'+totalRev.toLocaleString()],
+    ['거절 금액 (참고)', '₩'+totalRej.toLocaleString()],
+    ['대기 금액 (참고)', '₩'+totalPend.toLocaleString()]
+  ];
+  var ws1=XLSX.utils.aoa_to_sheet(summaryRows);
+  ws1['!cols']=[{wch:30},{wch:30}];
+  
+  // 시트 2: 결제 상세
   var rows=list.map(p=>({
     '회원이름':p.name||'-',
     '아이디':p.username||'-',
@@ -2517,14 +2549,15 @@ function exportPaymentExcel(){
     '관리자메모':p.adminNote||''
   }));
   
-  var ws=XLSX.utils.json_to_sheet(rows);
-  // 컬럼 너비
-  ws['!cols']=[
+  var ws2=XLSX.utils.json_to_sheet(rows);
+  ws2['!cols']=[
     {wch:10},{wch:12},{wch:14},{wch:6},{wch:30},{wch:10},
     {wch:12},{wch:10},{wch:12},{wch:12},{wch:20},{wch:8},{wch:20}
   ];
+  
   var wb=XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(wb, ws, '결제관리');
+  XLSX.utils.book_append_sheet(wb, ws1, '📊 요약');
+  XLSX.utils.book_append_sheet(wb, ws2, '📋 결제상세');
   
   var now=new Date();
   var dateStr=now.getFullYear()+String(now.getMonth()+1).padStart(2,'0')+String(now.getDate()).padStart(2,'0')
@@ -2534,10 +2567,10 @@ function exportPaymentExcel(){
     rangeStr='_'+(payDateFrom||'시작')+'~'+(payDateTo||'종료');
   }
   XLSX.writeFile(wb, '결제관리_'+dateStr+rangeStr+'.xlsx');
-  showToast('엑셀 다운로드 완료 ('+list.length+'건)','success');
+  showToast('엑셀 다운로드 완료 (총 '+list.length+'건 / 매출 ₩'+totalRev.toLocaleString()+')','success');
 }
 
-// ★ 개발자 전용 — 매출현황 엑셀 다운로드 (날짜 범위 + 회원별/지점별)
+// ★ 개발자 전용 — 매출현황 엑셀 다운로드 (날짜 범위 + 요약 + 총판/지사/지점 분리)
 function exportRevenueExcel(){
   if(role!=='dev'){showToast('엑셀 다운로드는 개발자만 가능합니다','error');return;}
   if(typeof XLSX==='undefined'){showToast('엑셀 라이브러리 로드 실패. 새로고침 해주세요','error');return;}
@@ -2549,74 +2582,234 @@ function exportRevenueExcel(){
   
   var vis=getVisibleBranchIds();
   
-  // 시트 1: 결제 매출 상세 (날짜 범위 안의 승인 결제)
-  var paymentRows=payments.filter(p=>{
-    if(p.status!=='approved')return false;
+  // 헬퍼: branch_id → 총판/지사/지점 이름
+  function getOrgHierarchy(branchId){
+    if(branchId==null)return{master:'-',branch:'-',sub:'-'};
+    var b=branches.find(x=>x.id===branchId);
+    if(!b)return{master:'?',branch:'?',sub:'?'};
+    if(b.type==='sub'){
+      var br=branches.find(x=>x.id===b.parent_id);
+      var ma=br?branches.find(x=>x.id===br.parent_id):null;
+      return{master:ma?ma.name:'-',branch:br?br.name:'-',sub:b.name};
+    }
+    if(b.type==='branch'){
+      var ma2=branches.find(x=>x.id===b.parent_id);
+      return{master:ma2?ma2.name:'-',branch:b.name,sub:'(직속)'};
+    }
+    if(b.type==='master')return{master:b.name,branch:'(직속)',sub:'(직속)'};
+    return{master:'-',branch:'-',sub:'-'};
+  }
+  
+  // 기간 안 모든 결제 (승인+거절+대기 — 통계용)
+  var allInRange=payments.filter(p=>{
     if(!paymentMatchesPlatform(p))return false;
     if(vis!==null&&(p.branch_id==null||vis.indexOf(p.branch_id)<0))return false;
-    var pD=p.processedAt?new Date(p.processedAt):(p.createdAt?new Date(p.createdAt):pd(p.date));
+    var pD=(p.status==='pending'?(p.createdAt?new Date(p.createdAt):pd(p.date)):(p.processedAt?new Date(p.processedAt):(p.createdAt?new Date(p.createdAt):pd(p.date))));
     if(!pD)return false;
     return pD>=fromMs&&pD<=toMs;
-  }).map(p=>({
-    '승인일':p.processedAt?isoToFd(p.processedAt):p.date,
-    '회원이름':p.name||'-',
-    '아이디':p.username||'-',
-    '전화':p.phone||'-',
-    '앱':p.appType==='grab'?'그랩':'토스',
-    '소속지점':branchPath(p.branch_id,false).replace(/<[^>]+>/g,'').replace(/\s+/g,' ').trim(),
-    '금액':p.amount||0,
-    '입금자명':p.note||'',
-    '처리자':p.processedByName||'-'
-  }));
-  
-  if(paymentRows.length===0){showToast('해당 기간 매출 데이터가 없습니다','info');return;}
-  
-  // 시트 2: 지점별 매출 합계
-  var byBranch={};
-  paymentRows.forEach(r=>{
-    var key=r['소속지점'];
-    if(!byBranch[key])byBranch[key]={'소속지점':key,'건수':0,'합계':0,'토스':0,'그랩':0};
-    byBranch[key]['건수']++;
-    byBranch[key]['합계']+=r['금액'];
-    if(r['앱']==='토스')byBranch[key]['토스']+=r['금액'];
-    else byBranch[key]['그랩']+=r['금액'];
   });
-  var branchRows=Object.values(byBranch).sort((a,b)=>b['합계']-a['합계']);
-  // 합계 행
-  var grandTotal=branchRows.reduce((s,r)=>s+r['합계'],0);
-  var grandCount=branchRows.reduce((s,r)=>s+r['건수'],0);
-  var grandToss=branchRows.reduce((s,r)=>s+r['토스'],0);
-  var grandGrab=branchRows.reduce((s,r)=>s+r['그랩'],0);
-  branchRows.push({'소속지점':'━━ 합계 ━━','건수':grandCount,'합계':grandTotal,'토스':grandToss,'그랩':grandGrab});
   
-  // 시트 3: 일자별 매출 합계
-  var byDate={};
-  paymentRows.forEach(r=>{
-    var d=r['승인일'].substring(0,10);  // 2026.05.27 형태
-    if(!byDate[d])byDate[d]={'날짜':d,'건수':0,'합계':0};
-    byDate[d]['건수']++;
-    byDate[d]['합계']+=r['금액'];
-  });
-  var dailyRows=Object.values(byDate).sort((a,b)=>a['날짜'].localeCompare(b['날짜']));
+  // 승인된 것만 (매출 계산용)
+  var approvedInRange=allInRange.filter(p=>p.status==='approved');
+  var rejectedInRange=allInRange.filter(p=>p.status==='rejected');
+  var pendingInRange=allInRange.filter(p=>p.status==='pending');
   
-  // 워크북 생성 (시트 3개)
-  var wb=XLSX.utils.book_new();
-  var ws1=XLSX.utils.json_to_sheet(paymentRows);
-  ws1['!cols']=[{wch:14},{wch:10},{wch:12},{wch:14},{wch:6},{wch:30},{wch:10},{wch:12},{wch:20}];
-  XLSX.utils.book_append_sheet(wb, ws1, '결제 상세');
+  if(allInRange.length===0){showToast('해당 기간 결제 데이터가 없습니다','info');return;}
   
-  var ws2=XLSX.utils.json_to_sheet(branchRows);
-  ws2['!cols']=[{wch:30},{wch:8},{wch:14},{wch:12},{wch:12}];
-  XLSX.utils.book_append_sheet(wb, ws2, '지점별 합계');
+  var totalRev=approvedInRange.reduce((s,p)=>s+(p.amount||0),0);
+  var totalRejAmt=rejectedInRange.reduce((s,p)=>s+(p.amount||0),0);
+  var totalPendAmt=pendingInRange.reduce((s,p)=>s+(p.amount||0),0);
+  var avgRev=approvedInRange.length>0?Math.round(totalRev/approvedInRange.length):0;
+  var tossApproved=approvedInRange.filter(p=>p.appType==='toss');
+  var grabApproved=approvedInRange.filter(p=>p.appType==='grab');
+  var tossRev=tossApproved.reduce((s,p)=>s+(p.amount||0),0);
+  var grabRev=grabApproved.reduce((s,p)=>s+(p.amount||0),0);
   
-  var ws3=XLSX.utils.json_to_sheet(dailyRows);
-  ws3['!cols']=[{wch:14},{wch:8},{wch:14}];
-  XLSX.utils.book_append_sheet(wb, ws3, '일자별 합계');
-  
+  // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  // 시트 1: 📊 요약
+  // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
   var fromStr=fdToIsoDate(fromDate);
   var toStr=fdToIsoDate(toDate);
-  XLSX.writeFile(wb, '매출현황_'+fromStr+'_'+toStr+'.xlsx');
-  showToast('엑셀 다운로드 완료 ('+paymentRows.length+'건, 3개 시트)','success');
+  var dayDiff=Math.ceil((toMs-fromMs)/(86400000))+1;
+  
+  var summaryRows=[
+    ['📊 매출 요약 보고서',''],
+    ['',''],
+    ['조회 기간', fromStr+' ~ '+toStr+' ('+dayDiff+'일)'],
+    ['생성일시', new Date().toLocaleString('ko-KR')],
+    ['',''],
+    ['━━━ 결제 건수 ━━━',''],
+    ['총 신청 건수', allInRange.length+' 건'],
+    ['  └ 승인', approvedInRange.length+' 건'],
+    ['  └ 거절', rejectedInRange.length+' 건'],
+    ['  └ 대기', pendingInRange.length+' 건'],
+    ['승인률', allInRange.length>0?Math.round(approvedInRange.length/allInRange.length*100)+' %':'-'],
+    ['',''],
+    ['━━━ 매출 금액 ━━━',''],
+    ['총 매출 (승인 분)', '₩'+totalRev.toLocaleString()],
+    ['  └ 토스 매출 ('+tossApproved.length+'건)', '₩'+tossRev.toLocaleString()],
+    ['  └ 그랩 매출 ('+grabApproved.length+'건)', '₩'+grabRev.toLocaleString()],
+    ['평균 결제액', '₩'+avgRev.toLocaleString()],
+    ['일 평균 매출', '₩'+(dayDiff>0?Math.round(totalRev/dayDiff).toLocaleString():'0')],
+    ['',''],
+    ['━━━ 거절/대기 ━━━',''],
+    ['거절 금액 (참고)', '₩'+totalRejAmt.toLocaleString()],
+    ['대기 금액 (참고)', '₩'+totalPendAmt.toLocaleString()]
+  ];
+  var ws1=XLSX.utils.aoa_to_sheet(summaryRows);
+  ws1['!cols']=[{wch:30},{wch:30}];
+  // 첫 행 셀 (제목) 굵게 (스타일 적용은 XLSX 무료판 한계 — 셀 데이터로만)
+  
+  // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  // 시트 2: 📋 결제 상세 (전체 — 승인+거절+대기)
+  // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  var detailRows=allInRange.map(p=>{
+    var h=getOrgHierarchy(p.branch_id);
+    return{
+      '신청일':p.date,
+      '처리일':p.processedAt?isoToFd(p.processedAt):'-',
+      '회원이름':p.name||'-',
+      '아이디':p.username||'-',
+      '전화':p.phone||'-',
+      '앱':p.appType==='grab'?'그랩':'토스',
+      '총판':h.master,
+      '지사':h.branch,
+      '지점':h.sub,
+      '금액':p.amount||0,
+      '입금자명':p.note||'',
+      '본인名일치':(p.note&&p.name&&p.note.replace(/\s/g,'')===p.name.replace(/\s/g,''))?'O':(p.note?'X':'-'),
+      '상태':p.status==='approved'?'승인':p.status==='rejected'?'거절':'대기',
+      '처리자':p.processedByName||'-',
+      '관리자메모':p.adminNote||''
+    };
+  });
+  var ws2=XLSX.utils.json_to_sheet(detailRows);
+  ws2['!cols']=[
+    {wch:12},{wch:12},{wch:10},{wch:12},{wch:14},{wch:6},
+    {wch:14},{wch:14},{wch:14},{wch:10},{wch:12},{wch:10},{wch:8},{wch:22},{wch:20}
+  ];
+  
+  // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  // 시트 3: 🏢 총판별 합계 (승인만)
+  // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  var byMaster={};
+  approvedInRange.forEach(p=>{
+    var h=getOrgHierarchy(p.branch_id);
+    var key=h.master;
+    if(!byMaster[key])byMaster[key]={'총판':key,'건수':0,'합계':0,'토스':0,'그랩':0,'거절수':0,'대기수':0};
+    byMaster[key]['건수']++;
+    byMaster[key]['합계']+=(p.amount||0);
+    if(p.appType==='grab')byMaster[key]['그랩']+=(p.amount||0);
+    else byMaster[key]['토스']+=(p.amount||0);
+  });
+  // 거절/대기 카운트도 더하기
+  rejectedInRange.forEach(p=>{
+    var h=getOrgHierarchy(p.branch_id);
+    if(!byMaster[h.master])byMaster[h.master]={'총판':h.master,'건수':0,'합계':0,'토스':0,'그랩':0,'거절수':0,'대기수':0};
+    byMaster[h.master]['거절수']++;
+  });
+  pendingInRange.forEach(p=>{
+    var h=getOrgHierarchy(p.branch_id);
+    if(!byMaster[h.master])byMaster[h.master]={'총판':h.master,'건수':0,'합계':0,'토스':0,'그랩':0,'거절수':0,'대기수':0};
+    byMaster[h.master]['대기수']++;
+  });
+  var masterRows=Object.values(byMaster).sort((a,b)=>b['합계']-a['합계']);
+  // 합계 행
+  masterRows.push({
+    '총판':'━━ 합계 ━━',
+    '건수':approvedInRange.length,
+    '합계':totalRev,
+    '토스':tossRev,
+    '그랩':grabRev,
+    '거절수':rejectedInRange.length,
+    '대기수':pendingInRange.length
+  });
+  var ws3=XLSX.utils.json_to_sheet(masterRows);
+  ws3['!cols']=[{wch:22},{wch:8},{wch:14},{wch:12},{wch:12},{wch:8},{wch:8}];
+  
+  // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  // 시트 4: 🏬 지사별 합계 (승인만)
+  // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  var byBranch={};
+  approvedInRange.forEach(p=>{
+    var h=getOrgHierarchy(p.branch_id);
+    var key=h.master+' > '+h.branch;
+    if(!byBranch[key])byBranch[key]={'총판':h.master,'지사':h.branch,'건수':0,'합계':0,'토스':0,'그랩':0};
+    byBranch[key]['건수']++;
+    byBranch[key]['합계']+=(p.amount||0);
+    if(p.appType==='grab')byBranch[key]['그랩']+=(p.amount||0);
+    else byBranch[key]['토스']+=(p.amount||0);
+  });
+  var branchRows=Object.values(byBranch).sort((a,b)=>b['합계']-a['합계']);
+  branchRows.push({
+    '총판':'━━ 합계 ━━','지사':'',
+    '건수':approvedInRange.length,'합계':totalRev,'토스':tossRev,'그랩':grabRev
+  });
+  var ws4=XLSX.utils.json_to_sheet(branchRows);
+  ws4['!cols']=[{wch:18},{wch:18},{wch:8},{wch:14},{wch:12},{wch:12}];
+  
+  // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  // 시트 5: 📍 지점별 합계 (승인만)
+  // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  var bySub={};
+  approvedInRange.forEach(p=>{
+    var h=getOrgHierarchy(p.branch_id);
+    var key=h.master+' > '+h.branch+' > '+h.sub;
+    if(!bySub[key])bySub[key]={'총판':h.master,'지사':h.branch,'지점':h.sub,'건수':0,'합계':0,'토스':0,'그랩':0};
+    bySub[key]['건수']++;
+    bySub[key]['합계']+=(p.amount||0);
+    if(p.appType==='grab')bySub[key]['그랩']+=(p.amount||0);
+    else bySub[key]['토스']+=(p.amount||0);
+  });
+  var subRows=Object.values(bySub).sort((a,b)=>b['합계']-a['합계']);
+  subRows.push({
+    '총판':'━━ 합계 ━━','지사':'','지점':'',
+    '건수':approvedInRange.length,'합계':totalRev,'토스':tossRev,'그랩':grabRev
+  });
+  var ws5=XLSX.utils.json_to_sheet(subRows);
+  ws5['!cols']=[{wch:18},{wch:18},{wch:18},{wch:8},{wch:14},{wch:12},{wch:12}];
+  
+  // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  // 시트 6: 📅 일자별 합계 (승인만)
+  // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  var byDate={};
+  approvedInRange.forEach(p=>{
+    var dStr=p.processedAt?isoToFd(p.processedAt):p.date;
+    var d=dStr?dStr.substring(0,10):'-';
+    if(!byDate[d])byDate[d]={'날짜':d,'요일':'-','건수':0,'합계':0,'토스':0,'그랩':0};
+    byDate[d]['건수']++;
+    byDate[d]['합계']+=(p.amount||0);
+    if(p.appType==='grab')byDate[d]['그랩']+=(p.amount||0);
+    else byDate[d]['토스']+=(p.amount||0);
+  });
+  // 요일 채우기
+  Object.keys(byDate).forEach(k=>{
+    try{
+      var d=new Date(k.replace(/\./g,'-'));
+      byDate[k]['요일']=['일','월','화','수','목','금','토'][d.getDay()];
+    }catch(e){}
+  });
+  var dailyRows=Object.values(byDate).sort((a,b)=>a['날짜'].localeCompare(b['날짜']));
+  dailyRows.push({
+    '날짜':'━━ 합계 ━━','요일':'',
+    '건수':approvedInRange.length,'합계':totalRev,'토스':tossRev,'그랩':grabRev
+  });
+  var ws6=XLSX.utils.json_to_sheet(dailyRows);
+  ws6['!cols']=[{wch:14},{wch:8},{wch:8},{wch:14},{wch:12},{wch:12}];
+  
+  // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  // 워크북 생성
+  // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  var wb=XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws1, '📊 요약');
+  XLSX.utils.book_append_sheet(wb, ws2, '📋 결제상세');
+  XLSX.utils.book_append_sheet(wb, ws3, '🏢 총판별');
+  XLSX.utils.book_append_sheet(wb, ws4, '🏬 지사별');
+  XLSX.utils.book_append_sheet(wb, ws5, '📍 지점별');
+  XLSX.utils.book_append_sheet(wb, ws6, '📅 일자별');
+  
+  XLSX.writeFile(wb, '매출보고서_'+fromStr+'_'+toStr+'.xlsx');
+  showToast('엑셀 다운로드 완료 (6개 시트, 총 '+allInRange.length+'건 / 매출 ₩'+totalRev.toLocaleString()+')','success');
 }
 
 // ★ 개발자 전용 — 매출현황 정리 (현재 표시 범위의 승인 결제 모두 삭제)
