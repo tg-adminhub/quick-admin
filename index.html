@@ -1615,9 +1615,9 @@ function fdToIsoDate(d){
 }
 
 async function approveM(id){
-  if(!confirm('이 회원을 승인하시겠습니까?\n\n승인 시 30일 무료 이용권이 자동 부여됩니다.'))return;
+  if(!confirm('이 회원을 승인하시겠습니까?\n\n승인 시 7일 무료 이용권이 자동 부여됩니다.'))return;
   try{
-    const expireAt=new Date(Date.now()+30*86400*1000).toISOString();
+    const expireAt=new Date(Date.now()+7*86400*1000).toISOString();
     const {error}=await sb.from('users').update({
       status:'approved',
       approved_at:new Date().toISOString(),
@@ -3370,6 +3370,7 @@ function renderSettings(){
     +'<label style="flex:1;min-width:110px;background:var(--bg3);padding:10px;border-radius:7px;cursor:pointer;display:flex;align-items:center;gap:8px"><input type="checkbox" id="chk-tgsignup" '+(get('tg_notify_signup','true')==='true'?'checked':'')+'> <span style="font-size:13px">📝 회원가입</span></label>'
     +'<label style="flex:1;min-width:110px;background:var(--bg3);padding:10px;border-radius:7px;cursor:pointer;display:flex;align-items:center;gap:8px"><input type="checkbox" id="chk-tgpayment" '+(get('tg_notify_payment','true')==='true'?'checked':'')+'> <span style="font-size:13px">💳 결제신청</span></label>'
     +'<label style="flex:1;min-width:110px;background:var(--bg3);padding:10px;border-radius:7px;cursor:pointer;display:flex;align-items:center;gap:8px"><input type="checkbox" id="chk-tgapproval" '+(get('tg_notify_approval','true')==='true'?'checked':'')+'> <span style="font-size:13px">✅ 결제승인</span></label>'
+    +'<label style="flex:1;min-width:110px;background:var(--bg3);padding:10px;border-radius:7px;cursor:pointer;display:flex;align-items:center;gap:8px"><input type="checkbox" id="chk-tgdiag" '+(get('tg_notify_diagnosis','true')==='true'?'checked':'')+'> <span style="font-size:13px">📋 연결 진단</span></label>'
     +'</div></div>'
     // 조용한 시간
     +'<div class="fg"><label class="fl">🌙 조용한 시간 <span style="color:var(--text3);font-size:10px;font-weight:400">(이 시간대엔 알림 안 보냄, 비우면 항상 알림)</span></label>'
@@ -3483,6 +3484,7 @@ async function saveAppSettings(){
     if(document.getElementById('chk-tgsignup'))pairs.tg_notify_signup=document.getElementById('chk-tgsignup').checked?'true':'false';
     if(document.getElementById('chk-tgpayment'))pairs.tg_notify_payment=document.getElementById('chk-tgpayment').checked?'true':'false';
     if(document.getElementById('chk-tgapproval'))pairs.tg_notify_approval=document.getElementById('chk-tgapproval').checked?'true':'false';
+    if(document.getElementById('chk-tgdiag'))pairs.tg_notify_diagnosis=document.getElementById('chk-tgdiag').checked?'true':'false';
     if(document.getElementById('set-tgquietstart'))pairs.tg_quiet_start=document.getElementById('set-tgquietstart').value;
     if(document.getElementById('set-tgquietend'))pairs.tg_quiet_end=document.getElementById('set-tgquietend').value;
     // ★ 인앱 업데이트
