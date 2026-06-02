@@ -1615,14 +1615,14 @@ function fdToIsoDate(d){
 }
 
 async function approveM(id){
-  if(!confirm('이 회원을 승인하시겠습니까?\n\n승인 시 7일 무료 이용권이 자동 부여됩니다.'))return;
+  if(!confirm('이 회원을 승인하시겠습니까?\n\n승인 시 7일 유료 이용권이 자동 부여됩니다.\n(무료 이용권은 관리자가 따로 설정해야 합니다)'))return;
   try{
     const expireAt=new Date(Date.now()+7*86400*1000).toISOString();
     const {error}=await sb.from('users').update({
       status:'approved',
       approved_at:new Date().toISOString(),
       license_expires_at:expireAt,
-      is_free_user:true
+      is_free_user:false
     }).eq('id',id);
     if(error)throw error;
     showToast('회원이 승인되었습니다','success');
