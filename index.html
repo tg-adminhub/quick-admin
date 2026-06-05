@@ -22,7 +22,7 @@
   --accent:#f0b429;--accent2:#d99e20;
   --text:#f0f0f0;--text2:#999;--text3:#555;
   --green:#27ae60;--red:#e74c3c;--blue:#2980b9;--purple:#8e44ad;
-  --toss:#0064ff;--grab:#00b14f;
+  --next:#0064ff;--grab:#00b14f;
   --border:#222;--radius:10px;
   --c-dev:#e74c3c;--c-master:#f0b429;--c-branch:#3498db;--c-sub:#2ecc71;
 }
@@ -32,7 +32,7 @@ body.light-mode{
   --accent:#d99e20;--accent2:#b8881c;
   --text:#1a1a1a;--text2:#666;--text3:#999;
   --green:#1e8449;--red:#c0392b;--blue:#1f618d;--purple:#6c3483;
-  --toss:#0050cc;--grab:#008f3f;
+  --next:#0050cc;--grab:#008f3f;
   --border:#d0d2d8;
   --c-dev:#c0392b;--c-master:#b8881c;--c-branch:#1f618d;--c-sub:#1e8449;
 }
@@ -79,7 +79,7 @@ select.finput option{background:var(--bg3)}
 .main-area{flex:1;display:flex;flex-direction:column;overflow:hidden}
 .topbar{background:var(--bg2);border-bottom:1px solid var(--border);padding:0 20px;display:flex;align-items:center;height:46px;flex-shrink:0}
 .ptab{padding:0 16px;height:46px;display:flex;align-items:center;gap:6px;font-size:12px;font-weight:600;cursor:pointer;border-bottom:2px solid transparent;color:var(--text2);transition:.15s;white-space:nowrap}
-.ptab:hover{color:var(--text)}.ptab.at-all{color:var(--accent);border-bottom-color:var(--accent)}.ptab.at-toss{color:var(--toss);border-bottom-color:var(--toss)}.ptab.at-grab{color:var(--grab);border-bottom-color:var(--grab)}
+.ptab:hover{color:var(--text)}.ptab.at-all{color:var(--accent);border-bottom-color:var(--accent)}.ptab.at-next{color:var(--next);border-bottom-color:var(--next)}.ptab.at-grab{color:var(--grab);border-bottom-color:var(--grab)}
 .pdot{width:7px;height:7px;border-radius:50%}
 .tb-right{margin-left:auto;display:flex;align-items:center;gap:8px}
 .sys-ok{display:flex;align-items:center;gap:5px;font-size:11px;color:var(--green);background:rgba(39,174,96,.1);border:1px solid rgba(39,174,96,.2);padding:4px 10px;border-radius:12px}
@@ -112,7 +112,7 @@ tr:last-child td{border-bottom:none}tr:hover td{background:rgba(255,255,255,.015
 .badge{display:inline-flex;align-items:center;padding:2px 7px;border-radius:5px;font-size:10px;font-weight:700;white-space:nowrap}
 .bg-green{background:rgba(39,174,96,.15);color:#27ae60}.bg-yellow{background:rgba(240,180,41,.15);color:#f0b429}.bg-red{background:rgba(231,76,60,.15);color:#e74c3c}
 .bg-blue{background:rgba(41,128,185,.15);color:#2980b9}.bg-purple{background:rgba(142,68,173,.15);color:#8e44ad}.bg-gray{background:rgba(255,255,255,.07);color:var(--text2)}
-.bg-toss{background:rgba(0,100,255,.15);color:var(--toss)}.bg-grab{background:rgba(0,177,79,.15);color:var(--grab)}
+.bg-next{background:rgba(0,100,255,.15);color:var(--next)}.bg-grab{background:rgba(0,177,79,.15);color:var(--grab)}
 .bg-dev{background:rgba(231,76,60,.12);color:var(--c-dev)}.bg-master{background:rgba(240,180,41,.12);color:var(--c-master)}.bg-branch{background:rgba(52,152,219,.12);color:var(--c-branch)}.bg-sub{background:rgba(46,204,113,.12);color:var(--c-sub)}
 .btn{padding:7px 13px;border-radius:7px;font-size:11px;font-weight:700;cursor:pointer;border:none;transition:.13s;display:inline-flex;align-items:center;gap:5px;white-space:nowrap}
 .btn-p{background:var(--accent);color:#000}.btn-p:hover{background:var(--accent2)}
@@ -288,7 +288,7 @@ tr:last-child td{border-bottom:none}tr:hover td{background:rgba(255,255,255,.015
         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
       </button>
       <div class="ptab at-all" onclick="setPlatform('all',this)"><span class="pdot" style="background:var(--accent)"></span>전체 통합</div>
-      <div class="ptab" onclick="setPlatform('toss',this)"><span class="pdot" style="background:var(--toss)"></span>토스고</div>
+      <div class="ptab" onclick="setPlatform('next',this)"><span class="pdot" style="background:var(--next)"></span>넥스트</div>
       <div class="ptab" onclick="setPlatform('grab',this)"><span class="pdot" style="background:var(--grab)"></span>그랩</div>
       <div class="tb-right">
         <div class="sys-ok" id="sys-status"><div class="sysdot"></div>DB 연결됨</div>
@@ -337,7 +337,7 @@ tr:last-child td{border-bottom:none}tr:hover td{background:rgba(255,255,255,.015
     <div class="alert a-blue">⚡ 어드민 직접 가입은 <b>승인 단계 skip</b> — 즉시 이용 가능 (status='approved')</div>
     <div class="fg"><label class="fl">앱 유형 *</label>
       <select class="fi2" id="am-app">
-        <option value="toss">토스고 (모든 차종)</option>
+        <option value="next">넥스트 (모든 차종)</option>
         <option value="grab">그랩 (오토바이)</option>
       </select>
     </div>
@@ -387,7 +387,7 @@ tr:last-child td{border-bottom:none}tr:hover td{background:rgba(255,255,255,.015
     
     <div class="fg"><label class="fl">📱 사용 앱 *</label>
       <div style="display:flex;gap:8px">
-        <label style="flex:1;background:var(--bg3);padding:10px;border-radius:7px;cursor:pointer;display:flex;align-items:center;gap:8px"><input type="radio" name="at-app" value="toss" checked> <span style="font-size:13px">🚗 토스고</span></label>
+        <label style="flex:1;background:var(--bg3);padding:10px;border-radius:7px;cursor:pointer;display:flex;align-items:center;gap:8px"><input type="radio" name="at-app" value="next" checked> <span style="font-size:13px">🚗 넥스트</span></label>
         <label style="flex:1;background:var(--bg3);padding:10px;border-radius:7px;cursor:pointer;display:flex;align-items:center;gap:8px"><input type="radio" name="at-app" value="grab"> <span style="font-size:13px">🛵 그랩</span></label>
       </div>
     </div>
@@ -517,7 +517,7 @@ tr:last-child td{border-bottom:none}tr:hover td{background:rgba(255,255,255,.015
     <input type="hidden" id="notice-id" value="">
     <div class="fg"><label class="fl">📍 대상 *</label>
       <select class="fi2" id="notice-audience">
-        <option value="app">📱 앱 공지 (회원 — 토스고/그랩 사용자)</option>
+        <option value="app">📱 앱 공지 (회원 — 넥스트/그랩 사용자)</option>
         <option value="admin">🖥️ 어드민 공지 (관리자 — 어드민 사이트 사용자)</option>
       </select>
     </div>
@@ -740,12 +740,12 @@ function branchPath(branchId,short){
   return path.map(p=>'<span style="color:'+col[p.type]+'">'+ico[p.type]+' '+p.name+'</span>').join('<span style="color:var(--text3);margin:0 4px">›</span>');
 }
 
-// ★ 사용 앱 배지 (토스고/그랩)
+// ★ 사용 앱 배지 (넥스트/그랩)
 function appBadge(appType){
   if(appType==='grab'){
     return '<span class="badge bg-grab" style="font-size:10px">🛵 그랩</span>';
   }
-  return '<span class="badge bg-toss" style="font-size:10px">🚗 토스고</span>';
+  return '<span class="badge bg-next" style="font-size:10px">🚗 넥스트</span>';
 }
 
 // =====================================================================
@@ -758,7 +758,7 @@ function dl(s){var d=pd(s);if(!d)return null;return Math.ceil((d-today)/86400000
 function expBadge(s){var n=dl(s);if(n===null)return '';if(n<0)return '<span class="badge bg-red">만료됨</span>';if(n<=3)return '<span class="badge bg-red">D-'+n+'</span>';if(n<=7)return '<span class="badge bg-yellow">D-'+n+'</span>';return '<span class="badge bg-green">D-'+n+'</span>';}
 
 function statusBadge(app){
-  if(app==='toss') return '<span class="badge bg-toss" style="font-size:10px">토스고앱</span>';
+  if(app==='next') return '<span class="badge bg-next" style="font-size:10px">넥스트앱</span>';
   if(app==='grab') return '<span class="badge bg-grab" style="font-size:10px">그랩앱</span>';
   return '<span class="badge bg-gray" style="font-size:10px">미확인</span>';
 }
@@ -953,8 +953,8 @@ async function loadAllData(){
       username:u.username,
       phone:u.phone,
       residentNum:u.resident_num,
-      signupApp:u.app_type||'toss',  // ★ 사용 앱 (toss/grab)
-      appType:u.app_type||'toss',
+      signupApp:u.app_type||'next',  // ★ 사용 앱 (next/grab)
+      appType:u.app_type||'next',
       status:u.status||'pending',
       plan:u.is_free_user?'free':'paid',
       expire:u.license_expires_at?isoToFd(u.license_expires_at):'',
@@ -967,12 +967,12 @@ async function loadAllData(){
       createdAt:u.created_at,
       // 호환성 필드
       orgType:'sub',orgId:'manual',
-      devices:[{num:1,label:'1'+(u.real_name||u.username),platform:u.app_type||'toss',fee:0,main:true}].concat(
+      devices:[{num:1,label:'1'+(u.real_name||u.username),platform:u.app_type||'next',fee:0,main:true}].concat(
         (deviceData||[]).filter(d=>d.user_id===u.id).map((d,i)=>({
           id:d.id,
           num:i+2,
           label:d.label||((i+2)+(u.real_name||u.username)),
-          platform:u.app_type||'toss',
+          platform:u.app_type||'next',
           fee:DEV_FEE,
           main:false,
           phone:d.phone_number,
@@ -991,8 +991,8 @@ async function loadAllData(){
       username:p.users?p.users.username:'-',
       phone:p.users?p.users.phone:'-',
       branch_id:p.users?p.users.branch_id:null,
-      platform:p.users?(p.users.app_type||'toss'):'toss',
-      appType:p.users?(p.users.app_type||'toss'):'toss',
+      platform:p.users?(p.users.app_type||'next'):'next',
+      appType:p.users?(p.users.app_type||'next'):'next',
       amount:p.amount,
       date:isoToFd(p.created_at),
       createdAt:p.created_at,  // ★ 날짜 필터용 ISO
@@ -1162,7 +1162,7 @@ function navigate(pg){
     accounts:renderAccounts,
     'my-settings':renderMySettings,
     'guide-admin':renderGuideAdmin,
-    'guide-toss':renderGuideToss,
+    'guide-next':renderGuideNext,
     'guide-grab':renderGuideGrab
   };
   document.getElementById('page-content').innerHTML=(ps[pg]||function(){return '<div class="empty"><div class="empty-icon">🔧</div><div class="empty-txt">준비 중</div></div>';})();
@@ -1199,7 +1199,7 @@ function setPlatform(p,el){
 }
 
 // =====================================================================
-//   GUIDES — 어드민/토스고/그랩 설치 가이드 (회원/관리자에게 유포용)
+//   GUIDES — 어드민/넥스트/그랩 설치 가이드 (회원/관리자에게 유포용)
 // =====================================================================
 
 // 공통 스타일 helpers
@@ -1266,9 +1266,9 @@ function renderGuideAdmin(){
   return html;
 }
 
-// 토스고/그랩 공통 가이드 본체 (앱 이름만 다름)
+// 넥스트/그랩 공통 가이드 본체 (앱 이름만 다름)
 function renderAppGuide(appName, appKey, accent, intro){
-  var html = '<div class="ph"><div><h1>'+(appKey==='toss'?'🚗 '+appName+' 앱 설치 가이드':'🛵 '+appName+' 앱 설치 가이드')+'</h1>'
+  var html = '<div class="ph"><div><h1>'+(appKey==='next'?'🚗 '+appName+' 앱 설치 가이드':'🛵 '+appName+' 앱 설치 가이드')+'</h1>'
     +'<p>'+intro+'</p></div></div>';
   
   // 0단계 — APK 다운로드
@@ -1276,7 +1276,7 @@ function renderAppGuide(appName, appKey, accent, intro){
     +'<div style="padding:14px;background:var(--bg3);border-radius:7px;font-size:13px;line-height:1.8">'
     +'<div>관리자가 보내준 텔레그램 메시지에서 <strong style="color:var(--accent)">'+appKey+'-app.apk</strong> 파일을 다운로드합니다.</div>'
     +'<div style="margin-top:8px;color:var(--text3);font-size:11px">※ Google Play 스토어에는 없습니다. 텔레그램으로 받은 APK 파일을 사용하세요.</div>'
-    +(appKey==='grab'?'<div style="margin-top:8px;color:var(--red);font-size:11px">※ <strong>오토바이 전용</strong> — 다른 차종이면 토스고 앱 사용</div>':'')
+    +(appKey==='grab'?'<div style="margin-top:8px;color:var(--red);font-size:11px">※ <strong>오토바이 전용</strong> — 다른 차종이면 넥스트 앱 사용</div>':'')
     +'</div></div>';
   
   // 1단계 — Play Protect 우회
@@ -1414,8 +1414,8 @@ function renderAppGuide(appName, appKey, accent, intro){
   return html;
 }
 
-function renderGuideToss(){
-  return renderAppGuide('토스고', 'toss', 'var(--toss)', '회원이 토스고 앱 (모든 차종) 을 설치하고 가입하는 자세한 방법');
+function renderGuideNext(){
+  return renderAppGuide('넥스트', 'next', 'var(--next)', '회원이 넥스트 앱 (모든 차종) 을 설치하고 가입하는 자세한 방법');
 }
 
 function renderGuideGrab(){
@@ -1423,14 +1423,14 @@ function renderGuideGrab(){
 }
 
 
-// ★ 현재 platform 탭(전체통합/토스고/그랩) 에 따라 회원/결제 필터링
+// ★ 현재 platform 탭(전체통합/넥스트/그랩) 에 따라 회원/결제 필터링
 function memberMatchesPlatform(m){
   if(platform==='all')return true;
-  return (m.appType||'toss')===platform;
+  return (m.appType||'next')===platform;
 }
 function paymentMatchesPlatform(p){
   if(platform==='all')return true;
-  return (p.appType||'toss')===platform;
+  return (p.appType||'next')===platform;
 }
 
 // =====================================================================
@@ -1446,11 +1446,11 @@ function renderDash(){
     return vis.indexOf(p.branch_id)>=0&&paymentMatchesPlatform(p);
   });
   
-  // 토스고/그랩 분리 통계 (platform='all' 일 때만 의미 있음, 아니어도 표시)
+  // 넥스트/그랩 분리 통계 (platform='all' 일 때만 의미 있음, 아니어도 표시)
   var allVisMembers=members.filter(memberIsVisible);
-  var tossMembers=allVisMembers.filter(m=>(m.appType||'toss')==='toss');
-  var grabMembers=allVisMembers.filter(m=>(m.appType||'toss')==='grab');
-  var tossActive=tossMembers.filter(m=>m.status==='approved').length;
+  var nextMembers=allVisMembers.filter(m=>(m.appType||'next')==='next');
+  var grabMembers=allVisMembers.filter(m=>(m.appType||'next')==='grab');
+  var nextActive=nextMembers.filter(m=>m.status==='approved').length;
   var grabActive=grabMembers.filter(m=>m.status==='approved').length;
   
   var appr=visMembers.filter(function(m){return m.status==='approved';}).length;
@@ -1472,17 +1472,17 @@ function renderDash(){
   
   var html='<div class="ph"><div><h1>대시보드</h1><p>실시간 동기화</p></div><div><button class="btn btn-g" onclick="loadAllData().then(()=>{navigate(\'dashboard\');showToast(\'새로고침 완료\',\'success\');})">🔄 새로고침</button></div></div>';
   html+='<div class="sgrid sg4">'
-  +'<div class="scard" style="cursor:pointer" onclick="navigate(\'members\')"><div class="scard-top"><div class="slabel">전체 회원'+(platform!=='all'?' ('+(platform==='toss'?'토스고':'그랩')+')':'')+'</div><div class="sicon" style="background:rgba(41,128,185,.12);color:var(--blue)">👥</div></div><div class="sval">'+visMembers.length+'</div><div class="ssub">승인 '+appr+' / 대기 '+pend+'</div></div>'
+  +'<div class="scard" style="cursor:pointer" onclick="navigate(\'members\')"><div class="scard-top"><div class="slabel">전체 회원'+(platform!=='all'?' ('+(platform==='next'?'넥스트':'그랩')+')':'')+'</div><div class="sicon" style="background:rgba(41,128,185,.12);color:var(--blue)">👥</div></div><div class="sval">'+visMembers.length+'</div><div class="ssub">승인 '+appr+' / 대기 '+pend+'</div></div>'
   +'<div class="scard" style="cursor:pointer" onclick="memberFilter=\'pending\';navigate(\'members\')"><div class="scard-top"><div class="slabel">승인 대기</div><div class="sicon" style="background:rgba(240,180,41,.12);color:var(--accent)">⏳</div></div><div class="sval" style="color:var(--accent)">'+pend+'</div></div>'
   +'<div class="scard" style="cursor:pointer;'+(exp3>0?'border-top:2px solid var(--red)':'')+'" onclick="licenseExpireOnly=true;navigate(\'license\')"><div class="scard-top"><div class="slabel">3일 내 만료</div><div class="sicon" style="background:rgba(231,76,60,.12);color:var(--red)">⏰</div></div><div class="sval" style="color:'+(exp3>0?'var(--red)':'var(--text2)')+'">'+exp3+'</div></div>'
   +'<div class="scard" style="cursor:pointer;border-top:2px solid var(--accent)" onclick="navigate(\'payment\')"><div class="scard-top"><div class="slabel">이번 달 매출</div><div class="sicon" style="background:rgba(240,180,41,.12);color:var(--accent)">📅</div></div><div class="sval" style="color:var(--accent)">₩'+thisMonthRev.toLocaleString()+'</div><div class="ssub">누적 ₩'+totalRev.toLocaleString()+'</div></div>'
   +'</div>'
-  // ★ 토스고/그랩 분리 카드 (전체 통합 시점에서도 항상 표시)
+  // ★ 넥스트/그랩 분리 카드 (전체 통합 시점에서도 항상 표시)
   +'<div class="sgrid sg2" style="margin-top:12px">'
-  +'<div class="scard" style="cursor:pointer;border-top:2px solid var(--toss)" onclick="setPlatform(\'toss\',document.querySelector(\'.ptab:nth-child(2)\'))"><div class="scard-top"><div class="slabel">🚗 토스고 회원</div><div class="sicon" style="background:rgba(0,100,255,.12);color:var(--toss)">🚗</div></div>'
+  +'<div class="scard" style="cursor:pointer;border-top:2px solid var(--next)" onclick="setPlatform(\'next\',document.querySelector(\'.ptab:nth-child(2)\'))"><div class="scard-top"><div class="slabel">🚗 넥스트 회원</div><div class="sicon" style="background:rgba(0,100,255,.12);color:var(--next)">🚗</div></div>'
     +'<div style="display:flex;justify-content:space-between;align-items:flex-end;margin-top:6px">'
-    +'<div><div style="font-size:10px;color:var(--text3)">전체</div><div style="font-size:20px;font-weight:700;color:var(--toss)">'+tossMembers.length+'명</div></div>'
-    +'<div style="text-align:right"><div style="font-size:10px;color:var(--text3)">활성 (승인)</div><div style="font-size:14px;font-weight:600;color:var(--green)">'+tossActive+'명</div></div>'
+    +'<div><div style="font-size:10px;color:var(--text3)">전체</div><div style="font-size:20px;font-weight:700;color:var(--next)">'+nextMembers.length+'명</div></div>'
+    +'<div style="text-align:right"><div style="font-size:10px;color:var(--text3)">활성 (승인)</div><div style="font-size:14px;font-weight:600;color:var(--green)">'+nextActive+'명</div></div>'
     +'</div></div>'
   +'<div class="scard" style="cursor:pointer;border-top:2px solid var(--grab)" onclick="setPlatform(\'grab\',document.querySelector(\'.ptab:nth-child(3)\'))"><div class="scard-top"><div class="slabel">🛵 그랩 회원</div><div class="sicon" style="background:rgba(0,177,79,.12);color:var(--grab)">🛵</div></div>'
     +'<div style="display:flex;justify-content:space-between;align-items:flex-end;margin-top:6px">'
@@ -1700,9 +1700,9 @@ function showMember(id){
     // 사용 앱 라디오
     +'<div class="fg"><label class="fl">📱 사용 앱</label>'
     +'<div style="display:flex;gap:8px">'
-    +'<label style="flex:1;display:flex;align-items:center;gap:8px;padding:10px;background:var(--bg4);border-radius:6px;cursor:pointer;font-size:12px;border:1px solid '+(m.appType!=='grab'?'var(--toss)':'var(--border)')+'">'
-    +'<input type="radio" name="mem-apptype" value="toss"'+(m.appType!=='grab'?' checked':'')+'>'
-    +'<span>🚗 <strong>토스고</strong> <span style="color:var(--text3);font-size:10px">(모든 차종)</span></span>'
+    +'<label style="flex:1;display:flex;align-items:center;gap:8px;padding:10px;background:var(--bg4);border-radius:6px;cursor:pointer;font-size:12px;border:1px solid '+(m.appType!=='grab'?'var(--next)':'var(--border)')+'">'
+    +'<input type="radio" name="mem-apptype" value="next"'+(m.appType!=='grab'?' checked':'')+'>'
+    +'<span>🚗 <strong>넥스트</strong> <span style="color:var(--text3);font-size:10px">(모든 차종)</span></span>'
     +'</label>'
     +'<label style="flex:1;display:flex;align-items:center;gap:8px;padding:10px;background:var(--bg4);border-radius:6px;cursor:pointer;font-size:12px;border:1px solid '+(m.appType==='grab'?'var(--grab)':'var(--border)')+'">'
     +'<input type="radio" name="mem-apptype" value="grab"'+(m.appType==='grab'?' checked':'')+'>'
@@ -1769,7 +1769,7 @@ async function saveMemberInfo(id){
   var memo=document.getElementById('mem-memo').value;
   var newPw=document.getElementById('mem-newpw').value;
   var appTypeEl=document.querySelector('input[name="mem-apptype"]:checked');
-  var appType=appTypeEl?appTypeEl.value:'toss';
+  var appType=appTypeEl?appTypeEl.value:'next';
   var branchSel=document.getElementById('mem-branch');
   var newBranchId=branchSel?(branchSel.value?parseInt(branchSel.value):null):null;
   
@@ -2180,7 +2180,7 @@ async function saveAllDevChanges(){
       }).select().single();
       if(error)throw new Error('추가 실패: '+error.message);
       // 캐시 업데이트
-      m.devices.push({id:data.id,num:m.devices.length+1,label:addItem.label,phone:addItem.phone||'',platform:'toss',fee:addItem.fee,main:false});
+      m.devices.push({id:data.id,num:m.devices.length+1,label:addItem.label,phone:addItem.phone||'',platform:'next',fee:addItem.fee,main:false});
       totalDays+=addItem.days;
     }
     
@@ -2705,7 +2705,7 @@ function exportPaymentExcel(){
     '회원이름':p.name||'-',
     '아이디':p.username||'-',
     '전화':p.phone||'-',
-    '앱':p.appType==='grab'?'그랩':'토스고',
+    '앱':p.appType==='grab'?'그랩':'넥스트',
     '소속지점':branchPath(p.branch_id,false).replace(/<[^>]+>/g,'').replace(/\s+/g,' ').trim(),
     '금액':p.amount||0,
     '입금자명':p.note||'',
@@ -2788,9 +2788,9 @@ function exportRevenueExcel(){
   var totalRejAmt=rejectedInRange.reduce((s,p)=>s+(p.amount||0),0);
   var totalPendAmt=pendingInRange.reduce((s,p)=>s+(p.amount||0),0);
   var avgRev=approvedInRange.length>0?Math.round(totalRev/approvedInRange.length):0;
-  var tossApproved=approvedInRange.filter(p=>p.appType==='toss');
+  var nextApproved=approvedInRange.filter(p=>p.appType==='next');
   var grabApproved=approvedInRange.filter(p=>p.appType==='grab');
-  var tossRev=tossApproved.reduce((s,p)=>s+(p.amount||0),0);
+  var nextRev=nextApproved.reduce((s,p)=>s+(p.amount||0),0);
   var grabRev=grabApproved.reduce((s,p)=>s+(p.amount||0),0);
   
   // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -2815,7 +2815,7 @@ function exportRevenueExcel(){
     ['',''],
     ['━━━ 매출 금액 ━━━',''],
     ['총 매출 (승인 분)', '₩'+totalRev.toLocaleString()],
-    ['  └ 토스고 매출 ('+tossApproved.length+'건)', '₩'+tossRev.toLocaleString()],
+    ['  └ 넥스트 매출 ('+nextApproved.length+'건)', '₩'+nextRev.toLocaleString()],
     ['  └ 그랩 매출 ('+grabApproved.length+'건)', '₩'+grabRev.toLocaleString()],
     ['평균 결제액', '₩'+avgRev.toLocaleString()],
     ['일 평균 매출', '₩'+(dayDiff>0?Math.round(totalRev/dayDiff).toLocaleString():'0')],
@@ -2839,7 +2839,7 @@ function exportRevenueExcel(){
       '회원이름':p.name||'-',
       '아이디':p.username||'-',
       '전화':p.phone||'-',
-      '앱':p.appType==='grab'?'그랩':'토스고',
+      '앱':p.appType==='grab'?'그랩':'넥스트',
       '총판':h.master,
       '지사':h.branch,
       '지점':h.sub,
@@ -2864,21 +2864,21 @@ function exportRevenueExcel(){
   approvedInRange.forEach(p=>{
     var h=getOrgHierarchy(p.branch_id);
     var key=h.master;
-    if(!byMaster[key])byMaster[key]={'총판':key,'건수':0,'합계':0,'토스고':0,'그랩':0,'거절수':0,'대기수':0};
+    if(!byMaster[key])byMaster[key]={'총판':key,'건수':0,'합계':0,'넥스트':0,'그랩':0,'거절수':0,'대기수':0};
     byMaster[key]['건수']++;
     byMaster[key]['합계']+=(p.amount||0);
     if(p.appType==='grab')byMaster[key]['그랩']+=(p.amount||0);
-    else byMaster[key]['토스고']+=(p.amount||0);
+    else byMaster[key]['넥스트']+=(p.amount||0);
   });
   // 거절/대기 카운트도 더하기
   rejectedInRange.forEach(p=>{
     var h=getOrgHierarchy(p.branch_id);
-    if(!byMaster[h.master])byMaster[h.master]={'총판':h.master,'건수':0,'합계':0,'토스고':0,'그랩':0,'거절수':0,'대기수':0};
+    if(!byMaster[h.master])byMaster[h.master]={'총판':h.master,'건수':0,'합계':0,'넥스트':0,'그랩':0,'거절수':0,'대기수':0};
     byMaster[h.master]['거절수']++;
   });
   pendingInRange.forEach(p=>{
     var h=getOrgHierarchy(p.branch_id);
-    if(!byMaster[h.master])byMaster[h.master]={'총판':h.master,'건수':0,'합계':0,'토스고':0,'그랩':0,'거절수':0,'대기수':0};
+    if(!byMaster[h.master])byMaster[h.master]={'총판':h.master,'건수':0,'합계':0,'넥스트':0,'그랩':0,'거절수':0,'대기수':0};
     byMaster[h.master]['대기수']++;
   });
   var masterRows=Object.values(byMaster).sort((a,b)=>b['합계']-a['합계']);
@@ -2887,7 +2887,7 @@ function exportRevenueExcel(){
     '총판':'━━ 합계 ━━',
     '건수':approvedInRange.length,
     '합계':totalRev,
-    '토스고':tossRev,
+    '넥스트':nextRev,
     '그랩':grabRev,
     '거절수':rejectedInRange.length,
     '대기수':pendingInRange.length
@@ -2902,16 +2902,16 @@ function exportRevenueExcel(){
   approvedInRange.forEach(p=>{
     var h=getOrgHierarchy(p.branch_id);
     var key=h.master+' > '+h.branch;
-    if(!byBranch[key])byBranch[key]={'총판':h.master,'지사':h.branch,'건수':0,'합계':0,'토스고':0,'그랩':0};
+    if(!byBranch[key])byBranch[key]={'총판':h.master,'지사':h.branch,'건수':0,'합계':0,'넥스트':0,'그랩':0};
     byBranch[key]['건수']++;
     byBranch[key]['합계']+=(p.amount||0);
     if(p.appType==='grab')byBranch[key]['그랩']+=(p.amount||0);
-    else byBranch[key]['토스고']+=(p.amount||0);
+    else byBranch[key]['넥스트']+=(p.amount||0);
   });
   var branchRows=Object.values(byBranch).sort((a,b)=>b['합계']-a['합계']);
   branchRows.push({
     '총판':'━━ 합계 ━━','지사':'',
-    '건수':approvedInRange.length,'합계':totalRev,'토스고':tossRev,'그랩':grabRev
+    '건수':approvedInRange.length,'합계':totalRev,'넥스트':nextRev,'그랩':grabRev
   });
   var ws4=XLSX.utils.json_to_sheet(branchRows);
   ws4['!cols']=[{wch:18},{wch:18},{wch:8},{wch:14},{wch:12},{wch:12}];
@@ -2923,16 +2923,16 @@ function exportRevenueExcel(){
   approvedInRange.forEach(p=>{
     var h=getOrgHierarchy(p.branch_id);
     var key=h.master+' > '+h.branch+' > '+h.sub;
-    if(!bySub[key])bySub[key]={'총판':h.master,'지사':h.branch,'지점':h.sub,'건수':0,'합계':0,'토스고':0,'그랩':0};
+    if(!bySub[key])bySub[key]={'총판':h.master,'지사':h.branch,'지점':h.sub,'건수':0,'합계':0,'넥스트':0,'그랩':0};
     bySub[key]['건수']++;
     bySub[key]['합계']+=(p.amount||0);
     if(p.appType==='grab')bySub[key]['그랩']+=(p.amount||0);
-    else bySub[key]['토스고']+=(p.amount||0);
+    else bySub[key]['넥스트']+=(p.amount||0);
   });
   var subRows=Object.values(bySub).sort((a,b)=>b['합계']-a['합계']);
   subRows.push({
     '총판':'━━ 합계 ━━','지사':'','지점':'',
-    '건수':approvedInRange.length,'합계':totalRev,'토스고':tossRev,'그랩':grabRev
+    '건수':approvedInRange.length,'합계':totalRev,'넥스트':nextRev,'그랩':grabRev
   });
   var ws5=XLSX.utils.json_to_sheet(subRows);
   ws5['!cols']=[{wch:18},{wch:18},{wch:18},{wch:8},{wch:14},{wch:12},{wch:12}];
@@ -2944,11 +2944,11 @@ function exportRevenueExcel(){
   approvedInRange.forEach(p=>{
     var dStr=p.processedAt?isoToFd(p.processedAt):p.date;
     var d=dStr?dStr.substring(0,10):'-';
-    if(!byDate[d])byDate[d]={'날짜':d,'요일':'-','건수':0,'합계':0,'토스고':0,'그랩':0};
+    if(!byDate[d])byDate[d]={'날짜':d,'요일':'-','건수':0,'합계':0,'넥스트':0,'그랩':0};
     byDate[d]['건수']++;
     byDate[d]['합계']+=(p.amount||0);
     if(p.appType==='grab')byDate[d]['그랩']+=(p.amount||0);
-    else byDate[d]['토스고']+=(p.amount||0);
+    else byDate[d]['넥스트']+=(p.amount||0);
   });
   // 요일 채우기
   Object.keys(byDate).forEach(k=>{
@@ -2960,7 +2960,7 @@ function exportRevenueExcel(){
   var dailyRows=Object.values(byDate).sort((a,b)=>a['날짜'].localeCompare(b['날짜']));
   dailyRows.push({
     '날짜':'━━ 합계 ━━','요일':'',
-    '건수':approvedInRange.length,'합계':totalRev,'토스고':tossRev,'그랩':grabRev
+    '건수':approvedInRange.length,'합계':totalRev,'넥스트':nextRev,'그랩':grabRev
   });
   var ws6=XLSX.utils.json_to_sheet(dailyRows);
   ws6['!cols']=[{wch:14},{wch:8},{wch:8},{wch:14},{wch:12},{wch:12}];
@@ -3403,15 +3403,15 @@ function renderSettings(){
     +'</div>'
     // 강제 업데이트 토글
     +'<div class="trow" style="border-bottom:1px solid var(--border);padding-bottom:12px;margin-bottom:12px"><div><div style="font-size:12px;font-weight:600">🔒 강제 업데이트</div><div style="font-size:11px;color:var(--text2)">ON 시 업데이트 안 하면 앱 사용 불가 (건너뛰기 버튼 숨김)</div></div><button class="toggle '+(get('force_update','false')==='true'?'on':'')+'" id="tog-forceupd" onclick="this.classList.toggle(\'on\')"></button></div>'
-    // 토스고
+    // 넥스트
     +'<div style="background:var(--bg3);border-radius:7px;padding:12px;margin-bottom:10px">'
-    +'<div style="font-size:13px;font-weight:600;margin-bottom:8px">🚗 토스고 앱</div>'
+    +'<div style="font-size:13px;font-weight:600;margin-bottom:8px">🚗 넥스트 앱</div>'
     +'<div style="display:flex;gap:8px"><div class="fg" style="flex:1"><label class="fl">표시 버전 <span style="color:var(--text3);font-size:10px;font-weight:400">(회원 화면 표시용)</span></label>'
-    +'<input class="fi2" id="set-tossvname" value="'+get('toss_latest_version_name','1.0')+'" placeholder="1.2"></div>'
+    +'<input class="fi2" id="set-nextvname" value="'+get('next_latest_version_name','1.0')+'" placeholder="1.2"></div>'
     +'<div class="fg" style="flex:1"><label class="fl">내부 번호 <span style="color:var(--text3);font-size:10px;font-weight:400">(versionCode)</span></label>'
-    +'<input class="fi2" id="set-tossver" value="'+get('toss_latest_version','16')+'" placeholder="24" inputmode="numeric"></div></div>'
+    +'<input class="fi2" id="set-nextver" value="'+get('next_latest_version','16')+'" placeholder="24" inputmode="numeric"></div></div>'
     +'<div class="fg" style="margin:0"><label class="fl">APK 다운로드 링크</label>'
-    +'<input class="fi2" id="set-tossapk" value="'+get('toss_apk_url','')+'" placeholder="https://github.com/.../TO-SS.apk" style="font-size:11px"></div>'
+    +'<input class="fi2" id="set-nextapk" value="'+get('next_apk_url','')+'" placeholder="https://github.com/.../TO-SS.apk" style="font-size:11px"></div>'
     +'</div>'
     // 그랩
     +'<div style="background:var(--bg3);border-radius:7px;padding:12px">'
@@ -3501,9 +3501,9 @@ async function saveAppSettings(){
     if(document.getElementById('set-tgquietend'))pairs.tg_quiet_end=document.getElementById('set-tgquietend').value;
     // ★ 인앱 업데이트
     if(document.getElementById('tog-forceupd'))pairs.force_update=document.getElementById('tog-forceupd').classList.contains('on')?'true':'false';
-    if(document.getElementById('set-tossver'))pairs.toss_latest_version=document.getElementById('set-tossver').value.trim();
-    if(document.getElementById('set-tossvname'))pairs.toss_latest_version_name=document.getElementById('set-tossvname').value.trim();
-    if(document.getElementById('set-tossapk'))pairs.toss_apk_url=document.getElementById('set-tossapk').value.trim();
+    if(document.getElementById('set-nextver'))pairs.next_latest_version=document.getElementById('set-nextver').value.trim();
+    if(document.getElementById('set-nextvname'))pairs.next_latest_version_name=document.getElementById('set-nextvname').value.trim();
+    if(document.getElementById('set-nextapk'))pairs.next_apk_url=document.getElementById('set-nextapk').value.trim();
     if(document.getElementById('set-grabver'))pairs.grab_latest_version=document.getElementById('set-grabver').value.trim();
     if(document.getElementById('set-grabvname'))pairs.grab_latest_version_name=document.getElementById('set-grabvname').value.trim();
     if(document.getElementById('set-grabapk'))pairs.grab_apk_url=document.getElementById('set-grabapk').value.trim();
@@ -3988,7 +3988,7 @@ function openAddMember(){
   ['am-username','am-password','am-realname','am-resident','am-phone'].forEach(id=>{
     var el=document.getElementById(id);if(el)el.value='';
   });
-  document.getElementById('am-app').value='toss';
+  document.getElementById('am-app').value='next';
   
   // ★ 단계별 select 숨김 — 평면 select 한 개로 통합 (2026.05.27)
   //   이전: 총판 → 지사 → 지점 3단계 → 산하 조직 없으면 모달 안 열림
@@ -4076,7 +4076,7 @@ function openAddTestMember(){
   document.getElementById('at-password').value='1234';
   document.getElementById('at-name').value='';
   document.getElementById('at-expire').value='7';
-  document.querySelector('input[name="at-app"][value="toss"]').checked=true;
+  document.querySelector('input[name="at-app"][value="next"]').checked=true;
   
   // 지점 select 채우기 — 모든 지점 (sub) + 지사 (branch)
   var branchSel=document.getElementById('at-branch');
@@ -4151,7 +4151,7 @@ async function saveTestMember(){
     if(error)throw error;
     
     closeModal('modal-add-test');
-    showToast('⚡ 테스트 회원 생성 완료\n아이디: '+uname+' / 비번: '+pw+' / 앱: '+(app==='grab'?'그랩':'토스고')+'\n만료: '+expDays+'일 후','success');
+    showToast('⚡ 테스트 회원 생성 완료\n아이디: '+uname+' / 비번: '+pw+' / 앱: '+(app==='grab'?'그랩':'넥스트')+'\n만료: '+expDays+'일 후','success');
     await loadAllData();
     navigate('members');
   }catch(e){
