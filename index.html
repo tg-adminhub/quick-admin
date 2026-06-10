@@ -288,7 +288,7 @@ tr:last-child td{border-bottom:none}tr:hover td{background:rgba(255,255,255,.015
         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
       </button>
       <div class="ptab at-all" onclick="setPlatform('all',this)"><span class="pdot" style="background:var(--accent)"></span>전체 통합</div>
-      <div class="ptab" onclick="setPlatform('next',this)"><span class="pdot" style="background:var(--next)"></span>넥스트</div>
+      <div class="ptab" onclick="setPlatform('next',this)"><span class="pdot" style="background:var(--next)"></span>T-oss</div>
       <div class="ptab" onclick="setPlatform('grab',this)"><span class="pdot" style="background:var(--grab)"></span>그랩</div>
       <div class="tb-right">
         <div class="sys-ok" id="sys-status"><div class="sysdot"></div>DB 연결됨</div>
@@ -337,7 +337,7 @@ tr:last-child td{border-bottom:none}tr:hover td{background:rgba(255,255,255,.015
     <div class="alert a-blue">⚡ 어드민 직접 가입은 <b>승인 단계 skip</b> — 즉시 이용 가능 (status='approved')</div>
     <div class="fg"><label class="fl">앱 유형 *</label>
       <select class="fi2" id="am-app">
-        <option value="next">넥스트 (모든 차종)</option>
+        <option value="next">T-oss (모든 차종)</option>
         <option value="grab">그랩 (오토바이)</option>
       </select>
     </div>
@@ -387,7 +387,7 @@ tr:last-child td{border-bottom:none}tr:hover td{background:rgba(255,255,255,.015
     
     <div class="fg"><label class="fl">📱 사용 앱 *</label>
       <div style="display:flex;gap:8px">
-        <label style="flex:1;background:var(--bg3);padding:10px;border-radius:7px;cursor:pointer;display:flex;align-items:center;gap:8px"><input type="radio" name="at-app" value="next" checked> <span style="font-size:13px">🚗 넥스트</span></label>
+        <label style="flex:1;background:var(--bg3);padding:10px;border-radius:7px;cursor:pointer;display:flex;align-items:center;gap:8px"><input type="radio" name="at-app" value="next" checked> <span style="font-size:13px">🚗 T-oss</span></label>
         <label style="flex:1;background:var(--bg3);padding:10px;border-radius:7px;cursor:pointer;display:flex;align-items:center;gap:8px"><input type="radio" name="at-app" value="grab"> <span style="font-size:13px">🛵 그랩</span></label>
       </div>
     </div>
@@ -517,7 +517,7 @@ tr:last-child td{border-bottom:none}tr:hover td{background:rgba(255,255,255,.015
     <input type="hidden" id="notice-id" value="">
     <div class="fg"><label class="fl">📍 대상 *</label>
       <select class="fi2" id="notice-audience">
-        <option value="app">📱 앱 공지 (회원 — 넥스트/그랩 사용자)</option>
+        <option value="app">📱 앱 공지 (회원 — T-oss/그랩 사용자)</option>
         <option value="admin">🖥️ 어드민 공지 (관리자 — 어드민 사이트 사용자)</option>
       </select>
     </div>
@@ -740,12 +740,12 @@ function branchPath(branchId,short){
   return path.map(p=>'<span style="color:'+col[p.type]+'">'+ico[p.type]+' '+p.name+'</span>').join('<span style="color:var(--text3);margin:0 4px">›</span>');
 }
 
-// ★ 사용 앱 배지 (넥스트/그랩)
+// ★ 사용 앱 배지 (T-oss/그랩)
 function appBadge(appType){
   if(appType==='grab'){
     return '<span class="badge bg-grab" style="font-size:10px">🛵 그랩</span>';
   }
-  return '<span class="badge bg-next" style="font-size:10px">🚗 넥스트</span>';
+  return '<span class="badge bg-next" style="font-size:10px">🚗 T-oss</span>';
 }
 
 // =====================================================================
@@ -758,7 +758,7 @@ function dl(s){var d=pd(s);if(!d)return null;return Math.ceil((d-today)/86400000
 function expBadge(s){var n=dl(s);if(n===null)return '';if(n<0)return '<span class="badge bg-red">만료됨</span>';if(n<=3)return '<span class="badge bg-red">D-'+n+'</span>';if(n<=7)return '<span class="badge bg-yellow">D-'+n+'</span>';return '<span class="badge bg-green">D-'+n+'</span>';}
 
 function statusBadge(app){
-  if(app==='next') return '<span class="badge bg-next" style="font-size:10px">넥스트앱</span>';
+  if(app==='next') return '<span class="badge bg-next" style="font-size:10px">T-oss앱</span>';
   if(app==='grab') return '<span class="badge bg-grab" style="font-size:10px">그랩앱</span>';
   return '<span class="badge bg-gray" style="font-size:10px">미확인</span>';
 }
@@ -1199,7 +1199,7 @@ function setPlatform(p,el){
 }
 
 // =====================================================================
-//   GUIDES — 어드민/넥스트/그랩 설치 가이드 (회원/관리자에게 유포용)
+//   GUIDES — 어드민/T-oss/그랩 설치 가이드 (회원/관리자에게 유포용)
 // =====================================================================
 
 // 공통 스타일 helpers
@@ -1266,7 +1266,7 @@ function renderGuideAdmin(){
   return html;
 }
 
-// 넥스트/그랩 공통 가이드 본체 (앱 이름만 다름)
+// T-oss/그랩 공통 가이드 본체 (앱 이름만 다름)
 function renderAppGuide(appName, appKey, accent, intro){
   var html = '<div class="ph"><div><h1>'+(appKey==='next'?'🚗 '+appName+' 앱 설치 가이드':'🛵 '+appName+' 앱 설치 가이드')+'</h1>'
     +'<p>'+intro+'</p></div></div>';
@@ -1276,7 +1276,7 @@ function renderAppGuide(appName, appKey, accent, intro){
     +'<div style="padding:14px;background:var(--bg3);border-radius:7px;font-size:13px;line-height:1.8">'
     +'<div>관리자가 보내준 텔레그램 메시지에서 <strong style="color:var(--accent)">'+appKey+'-app.apk</strong> 파일을 다운로드합니다.</div>'
     +'<div style="margin-top:8px;color:var(--text3);font-size:11px">※ Google Play 스토어에는 없습니다. 텔레그램으로 받은 APK 파일을 사용하세요.</div>'
-    +(appKey==='grab'?'<div style="margin-top:8px;color:var(--red);font-size:11px">※ <strong>오토바이 전용</strong> — 다른 차종이면 넥스트 앱 사용</div>':'')
+    +(appKey==='grab'?'<div style="margin-top:8px;color:var(--red);font-size:11px">※ <strong>오토바이 전용</strong> — 다른 차종이면 T-oss 앱 사용</div>':'')
     +'</div></div>';
   
   // 1단계 — Play Protect 우회
@@ -1415,7 +1415,7 @@ function renderAppGuide(appName, appKey, accent, intro){
 }
 
 function renderGuideNext(){
-  return renderAppGuide('넥스트', 'next', 'var(--next)', '회원이 넥스트 앱 (모든 차종) 을 설치하고 가입하는 자세한 방법');
+  return renderAppGuide('T-oss', 'next', 'var(--next)', '회원이 T-oss 앱 (모든 차종) 을 설치하고 가입하는 자세한 방법');
 }
 
 function renderGuideGrab(){
@@ -1423,7 +1423,7 @@ function renderGuideGrab(){
 }
 
 
-// ★ 현재 platform 탭(전체통합/넥스트/그랩) 에 따라 회원/결제 필터링
+// ★ 현재 platform 탭(전체통합/T-oss/그랩) 에 따라 회원/결제 필터링
 function memberMatchesPlatform(m){
   if(platform==='all')return true;
   return (m.appType||'next')===platform;
@@ -1446,7 +1446,7 @@ function renderDash(){
     return vis.indexOf(p.branch_id)>=0&&paymentMatchesPlatform(p);
   });
   
-  // 넥스트/그랩 분리 통계 (platform='all' 일 때만 의미 있음, 아니어도 표시)
+  // T-oss/그랩 분리 통계 (platform='all' 일 때만 의미 있음, 아니어도 표시)
   var allVisMembers=members.filter(memberIsVisible);
   var nextMembers=allVisMembers.filter(m=>(m.appType||'next')==='next');
   var grabMembers=allVisMembers.filter(m=>(m.appType||'next')==='grab');
@@ -1472,14 +1472,14 @@ function renderDash(){
   
   var html='<div class="ph"><div><h1>대시보드</h1><p>실시간 동기화</p></div><div><button class="btn btn-g" onclick="loadAllData().then(()=>{navigate(\'dashboard\');showToast(\'새로고침 완료\',\'success\');})">🔄 새로고침</button></div></div>';
   html+='<div class="sgrid sg4">'
-  +'<div class="scard" style="cursor:pointer" onclick="navigate(\'members\')"><div class="scard-top"><div class="slabel">전체 회원'+(platform!=='all'?' ('+(platform==='next'?'넥스트':'그랩')+')':'')+'</div><div class="sicon" style="background:rgba(41,128,185,.12);color:var(--blue)">👥</div></div><div class="sval">'+visMembers.length+'</div><div class="ssub">승인 '+appr+' / 대기 '+pend+'</div></div>'
+  +'<div class="scard" style="cursor:pointer" onclick="navigate(\'members\')"><div class="scard-top"><div class="slabel">전체 회원'+(platform!=='all'?' ('+(platform==='next'?'T-oss':'그랩')+')':'')+'</div><div class="sicon" style="background:rgba(41,128,185,.12);color:var(--blue)">👥</div></div><div class="sval">'+visMembers.length+'</div><div class="ssub">승인 '+appr+' / 대기 '+pend+'</div></div>'
   +'<div class="scard" style="cursor:pointer" onclick="memberFilter=\'pending\';navigate(\'members\')"><div class="scard-top"><div class="slabel">승인 대기</div><div class="sicon" style="background:rgba(240,180,41,.12);color:var(--accent)">⏳</div></div><div class="sval" style="color:var(--accent)">'+pend+'</div></div>'
   +'<div class="scard" style="cursor:pointer;'+(exp3>0?'border-top:2px solid var(--red)':'')+'" onclick="licenseExpireOnly=true;navigate(\'license\')"><div class="scard-top"><div class="slabel">3일 내 만료</div><div class="sicon" style="background:rgba(231,76,60,.12);color:var(--red)">⏰</div></div><div class="sval" style="color:'+(exp3>0?'var(--red)':'var(--text2)')+'">'+exp3+'</div></div>'
   +'<div class="scard" style="cursor:pointer;border-top:2px solid var(--accent)" onclick="navigate(\'payment\')"><div class="scard-top"><div class="slabel">이번 달 매출</div><div class="sicon" style="background:rgba(240,180,41,.12);color:var(--accent)">📅</div></div><div class="sval" style="color:var(--accent)">₩'+thisMonthRev.toLocaleString()+'</div><div class="ssub">누적 ₩'+totalRev.toLocaleString()+'</div></div>'
   +'</div>'
-  // ★ 넥스트/그랩 분리 카드 (전체 통합 시점에서도 항상 표시)
+  // ★ T-oss/그랩 분리 카드 (전체 통합 시점에서도 항상 표시)
   +'<div class="sgrid sg2" style="margin-top:12px">'
-  +'<div class="scard" style="cursor:pointer;border-top:2px solid var(--next)" onclick="setPlatform(\'next\',document.querySelector(\'.ptab:nth-child(2)\'))"><div class="scard-top"><div class="slabel">🚗 넥스트 회원</div><div class="sicon" style="background:rgba(0,100,255,.12);color:var(--next)">🚗</div></div>'
+  +'<div class="scard" style="cursor:pointer;border-top:2px solid var(--next)" onclick="setPlatform(\'next\',document.querySelector(\'.ptab:nth-child(2)\'))"><div class="scard-top"><div class="slabel">🚗 T-oss 회원</div><div class="sicon" style="background:rgba(0,100,255,.12);color:var(--next)">🚗</div></div>'
     +'<div style="display:flex;justify-content:space-between;align-items:flex-end;margin-top:6px">'
     +'<div><div style="font-size:10px;color:var(--text3)">전체</div><div style="font-size:20px;font-weight:700;color:var(--next)">'+nextMembers.length+'명</div></div>'
     +'<div style="text-align:right"><div style="font-size:10px;color:var(--text3)">활성 (승인)</div><div style="font-size:14px;font-weight:600;color:var(--green)">'+nextActive+'명</div></div>'
@@ -1702,7 +1702,7 @@ function showMember(id){
     +'<div style="display:flex;gap:8px">'
     +'<label style="flex:1;display:flex;align-items:center;gap:8px;padding:10px;background:var(--bg4);border-radius:6px;cursor:pointer;font-size:12px;border:1px solid '+(m.appType!=='grab'?'var(--next)':'var(--border)')+'">'
     +'<input type="radio" name="mem-apptype" value="next"'+(m.appType!=='grab'?' checked':'')+'>'
-    +'<span>🚗 <strong>넥스트</strong> <span style="color:var(--text3);font-size:10px">(모든 차종)</span></span>'
+    +'<span>🚗 <strong>T-oss</strong> <span style="color:var(--text3);font-size:10px">(모든 차종)</span></span>'
     +'</label>'
     +'<label style="flex:1;display:flex;align-items:center;gap:8px;padding:10px;background:var(--bg4);border-radius:6px;cursor:pointer;font-size:12px;border:1px solid '+(m.appType==='grab'?'var(--grab)':'var(--border)')+'">'
     +'<input type="radio" name="mem-apptype" value="grab"'+(m.appType==='grab'?' checked':'')+'>'
@@ -2705,7 +2705,7 @@ function exportPaymentExcel(){
     '회원이름':p.name||'-',
     '아이디':p.username||'-',
     '전화':p.phone||'-',
-    '앱':p.appType==='grab'?'그랩':'넥스트',
+    '앱':p.appType==='grab'?'그랩':'T-oss',
     '소속지점':branchPath(p.branch_id,false).replace(/<[^>]+>/g,'').replace(/\s+/g,' ').trim(),
     '금액':p.amount||0,
     '입금자명':p.note||'',
@@ -2815,7 +2815,7 @@ function exportRevenueExcel(){
     ['',''],
     ['━━━ 매출 금액 ━━━',''],
     ['총 매출 (승인 분)', '₩'+totalRev.toLocaleString()],
-    ['  └ 넥스트 매출 ('+nextApproved.length+'건)', '₩'+nextRev.toLocaleString()],
+    ['  └ T-oss 매출 ('+nextApproved.length+'건)', '₩'+nextRev.toLocaleString()],
     ['  └ 그랩 매출 ('+grabApproved.length+'건)', '₩'+grabRev.toLocaleString()],
     ['평균 결제액', '₩'+avgRev.toLocaleString()],
     ['일 평균 매출', '₩'+(dayDiff>0?Math.round(totalRev/dayDiff).toLocaleString():'0')],
@@ -2839,7 +2839,7 @@ function exportRevenueExcel(){
       '회원이름':p.name||'-',
       '아이디':p.username||'-',
       '전화':p.phone||'-',
-      '앱':p.appType==='grab'?'그랩':'넥스트',
+      '앱':p.appType==='grab'?'그랩':'T-oss',
       '총판':h.master,
       '지사':h.branch,
       '지점':h.sub,
@@ -2864,21 +2864,21 @@ function exportRevenueExcel(){
   approvedInRange.forEach(p=>{
     var h=getOrgHierarchy(p.branch_id);
     var key=h.master;
-    if(!byMaster[key])byMaster[key]={'총판':key,'건수':0,'합계':0,'넥스트':0,'그랩':0,'거절수':0,'대기수':0};
+    if(!byMaster[key])byMaster[key]={'총판':key,'건수':0,'합계':0,'T-oss':0,'그랩':0,'거절수':0,'대기수':0};
     byMaster[key]['건수']++;
     byMaster[key]['합계']+=(p.amount||0);
     if(p.appType==='grab')byMaster[key]['그랩']+=(p.amount||0);
-    else byMaster[key]['넥스트']+=(p.amount||0);
+    else byMaster[key]['T-oss']+=(p.amount||0);
   });
   // 거절/대기 카운트도 더하기
   rejectedInRange.forEach(p=>{
     var h=getOrgHierarchy(p.branch_id);
-    if(!byMaster[h.master])byMaster[h.master]={'총판':h.master,'건수':0,'합계':0,'넥스트':0,'그랩':0,'거절수':0,'대기수':0};
+    if(!byMaster[h.master])byMaster[h.master]={'총판':h.master,'건수':0,'합계':0,'T-oss':0,'그랩':0,'거절수':0,'대기수':0};
     byMaster[h.master]['거절수']++;
   });
   pendingInRange.forEach(p=>{
     var h=getOrgHierarchy(p.branch_id);
-    if(!byMaster[h.master])byMaster[h.master]={'총판':h.master,'건수':0,'합계':0,'넥스트':0,'그랩':0,'거절수':0,'대기수':0};
+    if(!byMaster[h.master])byMaster[h.master]={'총판':h.master,'건수':0,'합계':0,'T-oss':0,'그랩':0,'거절수':0,'대기수':0};
     byMaster[h.master]['대기수']++;
   });
   var masterRows=Object.values(byMaster).sort((a,b)=>b['합계']-a['합계']);
@@ -2887,7 +2887,7 @@ function exportRevenueExcel(){
     '총판':'━━ 합계 ━━',
     '건수':approvedInRange.length,
     '합계':totalRev,
-    '넥스트':nextRev,
+    'T-oss':nextRev,
     '그랩':grabRev,
     '거절수':rejectedInRange.length,
     '대기수':pendingInRange.length
@@ -2902,16 +2902,16 @@ function exportRevenueExcel(){
   approvedInRange.forEach(p=>{
     var h=getOrgHierarchy(p.branch_id);
     var key=h.master+' > '+h.branch;
-    if(!byBranch[key])byBranch[key]={'총판':h.master,'지사':h.branch,'건수':0,'합계':0,'넥스트':0,'그랩':0};
+    if(!byBranch[key])byBranch[key]={'총판':h.master,'지사':h.branch,'건수':0,'합계':0,'T-oss':0,'그랩':0};
     byBranch[key]['건수']++;
     byBranch[key]['합계']+=(p.amount||0);
     if(p.appType==='grab')byBranch[key]['그랩']+=(p.amount||0);
-    else byBranch[key]['넥스트']+=(p.amount||0);
+    else byBranch[key]['T-oss']+=(p.amount||0);
   });
   var branchRows=Object.values(byBranch).sort((a,b)=>b['합계']-a['합계']);
   branchRows.push({
     '총판':'━━ 합계 ━━','지사':'',
-    '건수':approvedInRange.length,'합계':totalRev,'넥스트':nextRev,'그랩':grabRev
+    '건수':approvedInRange.length,'합계':totalRev,'T-oss':nextRev,'그랩':grabRev
   });
   var ws4=XLSX.utils.json_to_sheet(branchRows);
   ws4['!cols']=[{wch:18},{wch:18},{wch:8},{wch:14},{wch:12},{wch:12}];
@@ -2923,16 +2923,16 @@ function exportRevenueExcel(){
   approvedInRange.forEach(p=>{
     var h=getOrgHierarchy(p.branch_id);
     var key=h.master+' > '+h.branch+' > '+h.sub;
-    if(!bySub[key])bySub[key]={'총판':h.master,'지사':h.branch,'지점':h.sub,'건수':0,'합계':0,'넥스트':0,'그랩':0};
+    if(!bySub[key])bySub[key]={'총판':h.master,'지사':h.branch,'지점':h.sub,'건수':0,'합계':0,'T-oss':0,'그랩':0};
     bySub[key]['건수']++;
     bySub[key]['합계']+=(p.amount||0);
     if(p.appType==='grab')bySub[key]['그랩']+=(p.amount||0);
-    else bySub[key]['넥스트']+=(p.amount||0);
+    else bySub[key]['T-oss']+=(p.amount||0);
   });
   var subRows=Object.values(bySub).sort((a,b)=>b['합계']-a['합계']);
   subRows.push({
     '총판':'━━ 합계 ━━','지사':'','지점':'',
-    '건수':approvedInRange.length,'합계':totalRev,'넥스트':nextRev,'그랩':grabRev
+    '건수':approvedInRange.length,'합계':totalRev,'T-oss':nextRev,'그랩':grabRev
   });
   var ws5=XLSX.utils.json_to_sheet(subRows);
   ws5['!cols']=[{wch:18},{wch:18},{wch:18},{wch:8},{wch:14},{wch:12},{wch:12}];
@@ -2944,11 +2944,11 @@ function exportRevenueExcel(){
   approvedInRange.forEach(p=>{
     var dStr=p.processedAt?isoToFd(p.processedAt):p.date;
     var d=dStr?dStr.substring(0,10):'-';
-    if(!byDate[d])byDate[d]={'날짜':d,'요일':'-','건수':0,'합계':0,'넥스트':0,'그랩':0};
+    if(!byDate[d])byDate[d]={'날짜':d,'요일':'-','건수':0,'합계':0,'T-oss':0,'그랩':0};
     byDate[d]['건수']++;
     byDate[d]['합계']+=(p.amount||0);
     if(p.appType==='grab')byDate[d]['그랩']+=(p.amount||0);
-    else byDate[d]['넥스트']+=(p.amount||0);
+    else byDate[d]['T-oss']+=(p.amount||0);
   });
   // 요일 채우기
   Object.keys(byDate).forEach(k=>{
@@ -2960,7 +2960,7 @@ function exportRevenueExcel(){
   var dailyRows=Object.values(byDate).sort((a,b)=>a['날짜'].localeCompare(b['날짜']));
   dailyRows.push({
     '날짜':'━━ 합계 ━━','요일':'',
-    '건수':approvedInRange.length,'합계':totalRev,'넥스트':nextRev,'그랩':grabRev
+    '건수':approvedInRange.length,'합계':totalRev,'T-oss':nextRev,'그랩':grabRev
   });
   var ws6=XLSX.utils.json_to_sheet(dailyRows);
   ws6['!cols']=[{wch:14},{wch:8},{wch:8},{wch:14},{wch:12},{wch:12}];
@@ -3403,9 +3403,9 @@ function renderSettings(){
     +'</div>'
     // 강제 업데이트 토글
     +'<div class="trow" style="border-bottom:1px solid var(--border);padding-bottom:12px;margin-bottom:12px"><div><div style="font-size:12px;font-weight:600">🔒 강제 업데이트</div><div style="font-size:11px;color:var(--text2)">ON 시 업데이트 안 하면 앱 사용 불가 (건너뛰기 버튼 숨김)</div></div><button class="toggle '+(get('force_update','false')==='true'?'on':'')+'" id="tog-forceupd" onclick="this.classList.toggle(\'on\')"></button></div>'
-    // 넥스트
+    // T-oss
     +'<div style="background:var(--bg3);border-radius:7px;padding:12px;margin-bottom:10px">'
-    +'<div style="font-size:13px;font-weight:600;margin-bottom:8px">🚗 넥스트 앱</div>'
+    +'<div style="font-size:13px;font-weight:600;margin-bottom:8px">🚗 T-oss 앱</div>'
     +'<div style="display:flex;gap:8px"><div class="fg" style="flex:1"><label class="fl">표시 버전 <span style="color:var(--text3);font-size:10px;font-weight:400">(회원 화면 표시용)</span></label>'
     +'<input class="fi2" id="set-nextvname" value="'+get('next_latest_version_name','1.0')+'" placeholder="1.2"></div>'
     +'<div class="fg" style="flex:1"><label class="fl">내부 번호 <span style="color:var(--text3);font-size:10px;font-weight:400">(versionCode)</span></label>'
@@ -4151,7 +4151,7 @@ async function saveTestMember(){
     if(error)throw error;
     
     closeModal('modal-add-test');
-    showToast('⚡ 테스트 회원 생성 완료\n아이디: '+uname+' / 비번: '+pw+' / 앱: '+(app==='grab'?'그랩':'넥스트')+'\n만료: '+expDays+'일 후','success');
+    showToast('⚡ 테스트 회원 생성 완료\n아이디: '+uname+' / 비번: '+pw+' / 앱: '+(app==='grab'?'그랩':'T-oss')+'\n만료: '+expDays+'일 후','success');
     await loadAllData();
     navigate('members');
   }catch(e){
