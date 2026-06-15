@@ -615,6 +615,15 @@ function thisMonthEnd(){var d=new Date();return new Date(d.getFullYear(),d.getMo
 
 // 데이터 캐시 (Supabase 에서 로드)
 var members=[], payments=[], notices=[], appSettings={};
+// ★ 결제 note 표시용 (2026-06-11): 기기추가 인코딩 마커는 사람이 읽을 토막만 노출
+function displayNote(note){
+  if(!note) return '';
+  if(note.indexOf('[기기추가]|')===0){
+    var parts=note.split('|');
+    return parts[3]||'기기추가';  // "기기추가(라벨)"
+  }
+  return note;
+}
 var branches=[];   // ★ 모든 지점 (총판/지사/지점)
 var realRole='dev';     // ★ 실제 로그인한 어드민의 역할 (DB 에서 가져옴)
 var realBranchId=null;  // ★ 실제 로그인한 어드민의 소속 지점 ID
@@ -2171,30 +2180,24 @@ async function saveAllDevChanges(){
       if(error)throw new Error('삭제 실패: '+error.message);
     }
     
-    // 2. 추가 예정 처리
-    var addedRevenue=0;  // ★ 기기추가 요금 → 매출 반영용 (2026-06-11)
+    // 2. 추가 예정 처리 (2026-06-11 변경: 승인해야만 기기 생성)
+    //   기기를 즉시 만들지 않고, 결제관리에 '기기추가 대기' 결제요청만 생성.
+    //   승인 시 approveP 가 기기를 user_devices 에 insert (미승인 동안은 기기 없음 → 사용 불가).
+    //   기기 정보(label·phone)는 스키마 변경 없이 note 에 마커로 인코딩:
+    //     "기기추가|label|phone|표시문구"
+    var addedPending=0;
     for(var addItem of devPending.adds){
-      const {data,error}=await sb.from('user_devices').insert({
+      var fee=addItem.fee||0;
+      var encNote='[기기추가]|'+(addItem.label||'')+'|'+(addItem.phone||'')+'|기기추가('+(addItem.label||'')+')';
+      const {error:perr}=await sb.from('payment_requests').insert({
         user_id:m.id,
-        label:addItem.label,
-        phone_number:addItem.phone||''  // ★ 입력된 전화번호 저장
-      }).select().single();
-      if(error)throw new Error('추가 실패: '+error.message);
-      // 캐시 업데이트
-      m.devices.push({id:data.id,num:m.devices.length+1,label:addItem.label,phone:addItem.phone||'',platform:'next',fee:addItem.fee,main:false});
-      totalDays+=addItem.days;
-      // ★ 기기추가 요금을 매출(payment_requests)에 대기(pending)로 기록 — 결제관리에서 승인
-      //   (요금 0원이면 매출 의미 없으므로 생략)
-      if((addItem.fee||0)>0){
-        const {error:perr}=await sb.from('payment_requests').insert({
-          user_id:m.id,
-          amount:addItem.fee,
-          status:'pending',
-          note:'기기추가('+addItem.label+')'
-        });
-        if(perr)throw new Error('기기추가 매출 기록 실패: '+perr.message);
-        addedRevenue+=addItem.fee;
-      }
+        amount:fee,
+        status:'pending',
+        note:encNote
+      });
+      if(perr)throw new Error('기기추가 요청 생성 실패: '+perr.message);
+      addedPending++;
+      // ※ totalDays 에는 더하지 않음 — 기기추가는 이용권 연장과 무관
     }
     
     // 3. 만료일 연장 (모든 추가 일수 합산)
@@ -2220,7 +2223,7 @@ async function saveAllDevChanges(){
       if(m.devices[parseInt(idx)])m.devices[parseInt(idx)].fee=devPending.feeChanges[idx];
     });
     
-    showToast('✅ 저장 완료 — '+pendCount+'건 반영'+(totalDays>0?' · 이용권 '+totalDays+'일 연장':'')+(addedRevenue>0?' · 매출 ₩'+addedRevenue.toLocaleString()+' 대기등록':''),'success');
+    showToast('✅ 저장 완료 — '+pendCount+'건 반영'+(totalDays>0?' · 이용권 '+totalDays+'일 연장':'')+(addedPending>0?' · 기기추가 '+addedPending+'건 승인대기':''),'success');
     
     // 펜딩 초기화 + 모달 닫기 + 화면 갱신
     devPending={mid:null,adds:[],removes:[],feeChanges:{},daysToExtend:0};
@@ -2510,8 +2513,9 @@ function renderPayment(){
       var canCheck=isPending;
       var checked=selPayBulk.has(p.id)?' checked':'';
       // 입금자명 표시 — 본인 이름과 다르면 강조
-      var depositor=p.note||'';
-      var depositMatch=depositor && p.name && depositor.replace(/\s/g,'')===p.name.replace(/\s/g,'');
+      var isDevAddRow=(p.note||'').indexOf('[기기추가]|')===0;
+      var depositor=displayNote(p.note);
+      var depositMatch=!isDevAddRow && depositor && p.name && depositor.replace(/\s/g,'')===p.name.replace(/\s/g,'');
       var depositHtml=depositor
         ?'<div style="font-size:12px;font-weight:'+(depositMatch?'400':'700')+';color:'+(depositMatch?'var(--text)':'var(--accent)')+'">'+depositor+(depositMatch?'':' <span style="font-size:9px;background:rgba(240,180,41,.15);padding:1px 5px;border-radius:3px">⚠ 본인名 다름</span>')+'</div>'
         :'<span style="font-size:11px;color:var(--text3)">미입력</span>';
@@ -2721,8 +2725,8 @@ function exportPaymentExcel(){
     '앱':p.appType==='grab'?'그랩':'토스',
     '소속지점':branchPath(p.branch_id,false).replace(/<[^>]+>/g,'').replace(/\s+/g,' ').trim(),
     '금액':p.amount||0,
-    '입금자명':p.note||'',
-    '본인名일치':(p.note&&p.name&&p.note.replace(/\s/g,'')===p.name.replace(/\s/g,''))?'O':(p.note?'X':'-'),
+    '입금자명':displayNote(p.note),
+    '본인名일치':((p.note||'').indexOf('[기기추가]|')!==0 && p.note&&p.name&&p.note.replace(/\s/g,'')===p.name.replace(/\s/g,''))?'O':((p.note&&(p.note||'').indexOf('[기기추가]|')!==0)?'X':'-'),
     '신청일':p.date||'-',
     '처리일':p.processedAt?isoToFd(p.processedAt):'-',
     '처리자':p.processedByName||'-',
@@ -2857,8 +2861,8 @@ function exportRevenueExcel(){
       '지사':h.branch,
       '지점':h.sub,
       '금액':p.amount||0,
-      '입금자명':p.note||'',
-      '본인名일치':(p.note&&p.name&&p.note.replace(/\s/g,'')===p.name.replace(/\s/g,''))?'O':(p.note?'X':'-'),
+      '입금자명':displayNote(p.note),
+      '본인名일치':((p.note||'').indexOf('[기기추가]|')!==0 && p.note&&p.name&&p.note.replace(/\s/g,'')===p.name.replace(/\s/g,''))?'O':((p.note&&(p.note||'').indexOf('[기기추가]|')!==0)?'X':'-'),
       '상태':p.status==='approved'?'승인':p.status==='rejected'?'거절':'대기',
       '처리자':p.processedByName||'-',
       '관리자메모':p.adminNote||''
@@ -3094,10 +3098,22 @@ async function approveP(id, skipConfirm){
     showToast('본인 명의 결제는 다른 어드민이 승인해야 합니다','error');throw new Error('self-approve blocked');
   }
   
+  // ★ 기기추가 대기 건 판별 (2026-06-11): note 가 "[기기추가]|label|phone|..." 형식
+  var isDevAdd = (p.note||'').indexOf('[기기추가]|')===0;
+  var devAddLabel='', devAddPhone='';
+  if(isDevAdd){
+    var parts=(p.note||'').split('|');
+    devAddLabel=parts[1]||''; devAddPhone=parts[2]||'';
+  }
   if(!skipConfirm){
-    var msg='₩'+(p.amount||0).toLocaleString()+' 결제를 승인하시겠습니까?';
-    if(p.note){msg+='\n입금자명: '+p.note;}
-    msg+='\n\n승인 시 회원의 이용권 만료일이 오늘부터 40일 후로 설정됩니다.';
+    var msg='₩'+(p.amount||0).toLocaleString()+(isDevAdd?' 기기추가':' 결제')+'를 승인하시겠습니까?';
+    if(isDevAdd){
+      msg+='\n기기: '+devAddLabel+(devAddPhone?' ('+devAddPhone+')':'');
+      msg+='\n\n승인 시 이 기기가 실제로 추가됩니다. (이용권 연장 없음)';
+    } else {
+      if(p.note){msg+='\n입금자명: '+p.note;}
+      msg+='\n\n승인 시 회원의 이용권 만료일이 오늘부터 40일 후로 설정됩니다.';
+    }
     if(!confirm(msg))return;
   }
   try{
@@ -3126,6 +3142,22 @@ async function approveP(id, skipConfirm){
       }
     }
     if(pe)throw pe;
+    
+    // ★ 기기추가 승인이면: 실제 기기 생성 + 이용권 연장은 건너뜀 (2026-06-11)
+    if(isDevAdd){
+      const {error:de}=await sb.from('user_devices').insert({
+        user_id:p.userId,
+        label:devAddLabel,
+        phone_number:devAddPhone
+      });
+      if(de)throw new Error('기기 생성 실패: '+de.message);
+      if(!skipConfirm){
+        showToast('기기추가 승인 완료 — '+devAddLabel+' 등록됨','success');
+        await loadAllData();
+        navigate('payment');
+      }
+      return;  // ★ 40일 연장 / 만료일 변경 로직 타지 않음
+    }
     
     // ★ 회원 만료일 = max(기존 만료일, 오늘) + 40일 (기존 잔여기간 보존)
     var m=members.find(x=>x.id===p.userId);
