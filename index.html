@@ -2172,6 +2172,7 @@ async function saveAllDevChanges(){
     }
     
     // 2. 추가 예정 처리
+    var addedRevenue=0;  // ★ 기기추가 요금 → 매출 반영용 (2026-06-11)
     for(var addItem of devPending.adds){
       const {data,error}=await sb.from('user_devices').insert({
         user_id:m.id,
@@ -2182,6 +2183,18 @@ async function saveAllDevChanges(){
       // 캐시 업데이트
       m.devices.push({id:data.id,num:m.devices.length+1,label:addItem.label,phone:addItem.phone||'',platform:'next',fee:addItem.fee,main:false});
       totalDays+=addItem.days;
+      // ★ 기기추가 요금을 매출(payment_requests)에 대기(pending)로 기록 — 결제관리에서 승인
+      //   (요금 0원이면 매출 의미 없으므로 생략)
+      if((addItem.fee||0)>0){
+        const {error:perr}=await sb.from('payment_requests').insert({
+          user_id:m.id,
+          amount:addItem.fee,
+          status:'pending',
+          note:'기기추가('+addItem.label+')'
+        });
+        if(perr)throw new Error('기기추가 매출 기록 실패: '+perr.message);
+        addedRevenue+=addItem.fee;
+      }
     }
     
     // 3. 만료일 연장 (모든 추가 일수 합산)
@@ -2207,7 +2220,7 @@ async function saveAllDevChanges(){
       if(m.devices[parseInt(idx)])m.devices[parseInt(idx)].fee=devPending.feeChanges[idx];
     });
     
-    showToast('✅ 저장 완료 — '+pendCount+'건 반영'+(totalDays>0?' · 이용권 '+totalDays+'일 연장':''),'success');
+    showToast('✅ 저장 완료 — '+pendCount+'건 반영'+(totalDays>0?' · 이용권 '+totalDays+'일 연장':'')+(addedRevenue>0?' · 매출 ₩'+addedRevenue.toLocaleString()+' 대기등록':''),'success');
     
     // 펜딩 초기화 + 모달 닫기 + 화면 갱신
     devPending={mid:null,adds:[],removes:[],feeChanges:{},daysToExtend:0};
