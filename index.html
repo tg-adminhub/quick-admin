@@ -4459,6 +4459,22 @@ function renderAccounts(){
   setTimeout(loadAccounts,80);
   return html;
 }
+// ★ 어드민 계정 수정 권한 판정 (2026-06-11): 총판/지사가 본인 산하 계정 수정 허용.
+//   - dev: 전부 / 본인: 자기 자신 / master·branch: 본인 산하(getVisibleBranchIds)에 속한 하위 계정
+//   - 단 dev 역할 계정, 자기보다 상위/동급 총판은 수정 불가 (산하만)
+function canEditAccount(a){
+  if(!a) return false;
+  if(role==='dev') return true;
+  if(curAcc && a.id===curAcc.id) return true;   // 본인
+  // ★ 산하 수정은 총판(master)까지만 허용 (2026-06-11): 지사/지점은 본인 자신 외 수정 불가.
+  if(role!=='master') return false;
+  if(a.role==='dev'||a.role==='master') return false; // 총판은 dev/다른 총판 수정 불가
+  if(!a.branch_id) return false;
+  var vis=getVisibleBranchIds();                  // 본인 산하 지점 id 목록
+  if(!vis || vis.indexOf(a.branch_id)<0) return false;
+  return true;  // 총판 산하의 지사/지점만
+}
+
 async function loadAccounts(){
   try{
     const {data,error}=await sb.from('admins').select('*').order('created_at',{ascending:true});
@@ -4502,10 +4518,10 @@ async function loadAccounts(){
       +'<td style="font-size:11px;color:var(--text2)">'+isoToFd(a.created_at)+'</td>'
       +'<td><div style="display:flex;gap:4px;flex-wrap:wrap">'
       // 수정 권한: 개발자 = 모두 / 본인 = 자기 자신
-      +((role==='dev'||isMe)?'<button class="btn btn-g btn-sm" onclick="openEditAccount('+a.id+')">✏️ 수정</button>':'')
+      +(canEditAccount(a)?'<button class="btn btn-g btn-sm" onclick="openEditAccount('+a.id+')">✏️ 수정</button>':'')
       // 삭제 권한: 개발자 (자기 자신 제외, dev 역할 포함 모두 삭제 가능)
       +(role==='dev'&&!isMe?'<button class="btn btn-d btn-sm" onclick="deleteAccount('+a.id+',\''+a.username+'\')">삭제</button>':'')
-      +((role!=='dev'&&!isMe)?'<span style="font-size:10px;color:var(--text3)">—</span>':'')
+      +((!canEditAccount(a)&&!(role==='dev'&&!isMe))?'<span style="font-size:10px;color:var(--text3)">—</span>':'')
       +'</div></td>'
       +'</tr>';
     });
@@ -4534,9 +4550,8 @@ async function openEditAccount(id){
     const {data,error}=await sb.from('admins').select('*').eq('id',id).maybeSingle();
     if(error||!data){showToast('계정을 찾을 수 없습니다','error');return;}
     
-    // 권한 체크
-    var isMe=(curAcc&&curAcc.id===id);
-    if(role!=='dev'&&!isMe){
+    // 권한 체크 (2026-06-11: 총판/지사 산하 수정 허용 — canEditAccount 와 동일 기준)
+    if(!canEditAccount(data)){
       showToast('수정 권한이 없습니다','error');return;
     }
     
@@ -4556,6 +4571,11 @@ async function openEditAccount(id){
 // ★ 어드민 계정 수정 저장
 async function saveEditAccount(){
   var id=parseInt(document.getElementById('ea-id').value);
+  // ★ 저장 직전 권한 재검증 (2026-06-11): 모달 우회/시점변경 방지 — DB 에서 대상 다시 읽어 확인
+  try{
+    const {data:tgt}=await sb.from('admins').select('id,role,branch_id').eq('id',id).maybeSingle();
+    if(!tgt || !canEditAccount(tgt)){showToast('수정 권한이 없습니다','error');return;}
+  }catch(e){showToast('권한 확인 실패: '+e.message,'error');return;}
   var name=document.getElementById('ea-name').value.trim();
   var username=document.getElementById('ea-username').value.trim();
   var newPw=document.getElementById('ea-password').value;
