@@ -958,7 +958,7 @@ async function loadAllData(){
 
     // ★ 탈퇴 이력 로드 (2026-06-11): 재가입/악용 의심 대조용 (테이블 없으면 graceful)
     try{
-      const {data:wd,error:wErr}=await sb.from('withdrawn_users').select('phone,real_name,withdrawn_at');
+      const {data:wd,error:wErr}=await sb.from('withdrawn_users').select('phone,real_name,memo,branch_name,withdrawn_at');
       withdrawnList = (wErr ? [] : (wd||[]));
     }catch(_){ withdrawnList=[]; }
     
@@ -1588,6 +1588,30 @@ function suspectBadgeHtml(m){
   }).join('');
 }
 
+
+// ★ 회원의 과거 탈퇴이력 조회 (메모 인계/이력 표시용, 2026-06-11)
+//   같은 번호 또는 같은 이름으로 탈퇴한 기록을 최신순으로 반환.
+function pastWithdrawals(m){
+  var myPhone=normPhone(m.phone), myName=normName(m.name);
+  return (withdrawnList||[]).filter(function(w){
+    var wp=normPhone(w.phone), wn=normName(w.real_name);
+    return (myPhone && wp===myPhone) || (myName && wn===myName);
+  }).sort(function(a,b){ return (b.withdrawn_at||'').localeCompare(a.withdrawn_at||''); });
+}
+// ★ 과거이력의 메모를 합쳐서 인계 문자열 생성 (이전 지점/날짜 표기 포함)
+function inheritedMemoText(m){
+  var past=pastWithdrawals(m);
+  var lines=[];
+  past.forEach(function(w){
+    if(w.memo && w.memo.trim()){
+      var when=(w.withdrawn_at||'').slice(0,10);
+      var br=w.branch_name||'이전지점';
+      lines.push('[인계・'+br+'・'+when+'] '+w.memo.trim());
+    }
+  });
+  return lines.join('\n');
+}
+
 function renderMembers(){
   // ★ 권한 격리 + platform 필터
   var visMembers=members.filter(memberIsVisible).filter(memberMatchesPlatform);
@@ -1720,7 +1744,9 @@ async function deleteM(id){
         await sb.from('withdrawn_users').insert({
           phone:pNorm, phone_raw:m.phone||null, real_name:m.name||null,
           username:m.username||null, app_type:m.appType||null,
-          branch_id:m.branch_id||null, reason:'admin_delete'
+          branch_id:m.branch_id||null, reason:'admin_delete',
+          memo:m.memo||null,                                    // ★ 메모 인계용 (2026-06-11)
+          branch_name:branchPath(m.branch_id,true)||null        // ★ 이전 지점명(표시용)
         });
       }
     }catch(we){ console.warn('탈퇴이력 기록 실패(무시):',we); }
@@ -1812,9 +1838,27 @@ function showMember(id){
         return opts;
       })()
     +'</select></div>'
-    // 어드민 메모
-    +'<div class="fg"><label class="fl">📝 어드민 메모 <span style="color:var(--text3);font-size:10px;font-weight:400">(어드민만 볼 수 있음, 회원에겐 노출 안 됨)</span></label>'
-    +'<textarea class="fi2" id="mem-memo" rows="3" placeholder="이 회원에 대한 메모를 자유롭게 적어주세요. 예: 신원확인 완료, 특이사항 등">'+(m.memo||'').replace(/</g,'&lt;')+'</textarea></div>'
+    // 어드민 메모 (+ 과거 탈퇴이력 인계)
+    +(function(){
+        var past=pastWithdrawals(m);
+        if(!past.length) return '';
+        var rows=past.map(function(w){
+          var when=(w.withdrawn_at||'').slice(0,10);
+          var br=w.branch_name||'이전지점';
+          var mm=(w.memo||'').replace(/</g,'&lt;');
+          return '<div style="padding:4px 0;border-bottom:1px solid var(--line)"><b style="color:#e67e22">'+br+'</b> <span style="color:var(--text3);font-size:10px">'+when+'</span>'+(mm?'<br><span style="font-size:11px">'+mm+'</span>':' <span style="color:var(--text3);font-size:10px">(메모 없음)</span>')+'</div>';
+        }).join('');
+        return '<div class="alert" style="background:rgba(230,126,34,.12);border:1px solid rgba(230,126,34,.4);margin-bottom:8px"><div style="font-weight:600;color:#e67e22;margin-bottom:4px">⚠ 과거 탈퇴/타지점 이력 '+past.length+'건 — 악성/명의이전 확인</div>'+rows+'</div>';
+    })()
+    +'<div class="fg"><label class="fl">📝 어드민 메모 <span style="color:var(--text3);font-size:10px;font-weight:400">(어드민만 볼 수 있음 · 과거 메모는 자동 인계됨, 지우고 저장해야 사라짐)</span></label>'
+    +'<textarea class="fi2" id="mem-memo" rows="4" placeholder="이 회원에 대한 메모를 자유롭게 적어주세요.">'+(function(){
+        // ★ 메모 자동채움: 현재 메모 + (현재에 없는) 과거 인계 메모 합침
+        var cur=(m.memo||'').trim();
+        var inh=inheritedMemoText(m);
+        var merged=cur;
+        if(inh && cur.indexOf('[인계・')<0){ merged=(cur?cur+'\n':'')+inh; }
+        return merged.replace(/</g,'&lt;');
+    })()+'</textarea></div>'
     // 액션 버튼
     +'<div style="display:flex;gap:8px;margin-top:14px">'
     +'<button class="btn btn-g" style="flex:1" onclick="closeModal(\'modal-member\')">닫기</button>'
