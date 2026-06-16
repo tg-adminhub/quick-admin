@@ -361,7 +361,6 @@ tr:last-child td{border-bottom:none}tr:hover td{background:rgba(255,255,255,.015
     <div class="fg"><label class="fl">아이디 *</label><input class="fi2" id="am-username" placeholder="영문/숫자 4자 이상"></div>
     <div class="fg"><label class="fl">비밀번호 *</label><input class="fi2" type="password" id="am-password" placeholder="6자 이상"></div>
     <div class="fg"><label class="fl">실명 *</label><input class="fi2" id="am-realname" placeholder="홍길동"></div>
-    <div class="fg"><label class="fl">주민등록번호 *</label><input class="fi2" id="am-resident" placeholder="앞6자리+뒷1자리 (예: 9001011)" maxlength="7"></div>
     <div class="fg" style="margin:0"><label class="fl">전화번호 *</label><input class="fi2" id="am-phone" placeholder="01012345678"></div>
     <div style="display:flex;gap:8px;margin-top:14px">
       <button class="btn btn-g" style="flex:1" onclick="closeModal('modal-add-member')">취소</button>
@@ -970,6 +969,8 @@ async function loadAllData(){
       memo:u.memo,
       telegramId:u.telegram_id,
       branch_id:u.branch_id,  // ★ 권한 격리에 필요
+      isRejoined:u.is_rejoined||false,  // ★ 재가입(과거 탈퇴이력) 여부 (2026-06-11)
+      rejoinCount:u.rejoin_count||0,
       extraSlots:u.extra_phone_slots||0,
       approvedAt:u.approved_at,
       lastLoginAt:u.last_login_at,
@@ -1395,7 +1396,7 @@ function renderAppGuide(appName, appKey, accent, intro){
   // 8단계 — 회원가입
   html += '<div class="ss"><div class="ssh"><div class="ssi" style="background:rgba(142,68,173,.12);color:var(--purple)">📝</div><div><div class="sst">STEP 9. 회원가입</div></div></div>';
   html += guideStep(1, '[회원가입 →] 클릭', '로그인 화면 아래 <strong>"아직 계정이 없으신가요? 회원가입 →"</strong> 클릭');
-  html += guideStep(2, '정보 입력', '<strong>아이디</strong> (영문/숫자/언더바 4자 이상) / <strong>비밀번호</strong> (6자 이상) / <strong>실명</strong> / <strong>주민번호</strong> 앞6자리+뒷1자리 (총 7자리) / <strong>전화번호</strong>');
+  html += guideStep(2, '정보 입력', '<strong>아이디</strong> (영문/숫자/언더바 4자 이상) / <strong>비밀번호</strong> (6자 이상) / <strong>실명</strong> / <strong>전화번호</strong>');
   html += guideStep(3, '추천지점 입력', '<strong>"점"</strong> 으로 끝나는 정확한 지점명 입력 (예: 고양점, 서울중구점)<br><strong style="color:var(--accent)">⚠️ 관리자에게 정확한 지점명을 미리 확인하세요</strong>');
   html += guideStep(4, '[회원가입] → 대기', '"회원가입 완료! 관리자 승인 후 로그인 가능합니다" 표시 → 관리자가 어드민에서 승인할 때까지 대기');
   html += '</div>';
@@ -1596,7 +1597,7 @@ function renderMembers(){
     html+='<div class="tw"><table><thead><tr><th>기사</th><th>앱</th><th>소속</th><th>전화</th><th>가입일</th><th>상태</th><th>이용권</th><th>D-day</th><th>관리</th></tr></thead><tbody>';
     list.forEach(function(m){
       var c=ac(m.id);
-      html+='<tr><td><div class="minfo"><div class="mavatar" style="background:'+c+'22;color:'+c+'">'+(m.name?m.name[0]:'?')+'</div><div><div class="mname">'+m.name+'</div><div class="mid">@'+m.username+'</div></div></div></td>'
+      html+='<tr><td><div class="minfo"><div class="mavatar" style="background:'+c+'22;color:'+c+'">'+(m.name?m.name[0]:'?')+'</div><div><div class="mname">'+m.name+(m.isRejoined?' <span class="badge bg-red" style="font-size:9px" title="과거 탈퇴 이력 번호로 재가입 — 중복/악용 의심 확인">🔁 재가입'+(m.rejoinCount>1?'×'+m.rejoinCount:'')+'</span>':'')+'</div><div class="mid">@'+m.username+'</div></div></div></td>'
       +'<td>'+appBadge(m.appType)+'</td>'
       +'<td style="font-size:11px">'+branchPath(m.branch_id,true)+'</td>'
       +'<td style="font-size:11px">'+(m.phone||'-')+'</td>'
@@ -1663,6 +1664,17 @@ async function deleteM(id){
   var m=members.find(x=>x.id===id);if(!m)return;
   if(!confirm(m.name+' (@'+m.username+') 회원을 삭제하시겠습니까?\n\n⚠️ 이 작업은 되돌릴 수 없습니다.\n관련 기기, 결제 요청도 함께 삭제됩니다.'))return;
   try{
+    // ★ 탈퇴 이력 기록 (2026-06-11): 재가입 추적용 — 전화번호(숫자만)+이름만 가볍게 보관
+    try{
+      var pNorm=(m.phone||'').replace(/[^0-9]/g,'');
+      if(pNorm){
+        await sb.from('withdrawn_users').insert({
+          phone:pNorm, phone_raw:m.phone||null, real_name:m.name||null,
+          username:m.username||null, app_type:m.appType||null,
+          branch_id:m.branch_id||null, reason:'admin_delete'
+        });
+      }
+    }catch(we){ console.warn('탈퇴이력 기록 실패(무시):',we); }
     // payment_requests 먼저 삭제 (FK)
     await sb.from('payment_requests').delete().eq('user_id',id);
     // user_devices 삭제 (CASCADE 로 자동 삭제되지만 명시적으로)
@@ -1719,7 +1731,6 @@ function showMember(id){
     +'</label>'
     +'</div></div>'
     +'<div class="fg"><label class="fl">전화</label><input class="fi2" id="mem-phone" value="'+(m.phone||'').replace(/"/g,'&quot;')+'" placeholder="010-0000-0000"></div>'
-    +'<div class="fg"><label class="fl">주민번호 앞 6자리</label><input class="fi2" id="mem-rrn" value="'+(m.residentNum||'').replace(/"/g,'&quot;')+'" placeholder="900101-1******" maxlength="14"></div>'
     +'<div class="fg"><label class="fl">텔레그램 ID</label><input class="fi2" id="mem-tg" value="'+(m.telegramId||'').replace(/"/g,'&quot;')+'" placeholder="@telegram_id"></div>'
     // 소속 지점 변경
     +'<div class="fg"><label class="fl">📍 소속 지점</label>'
@@ -1772,8 +1783,7 @@ async function saveMemberInfo(id){
   var usernameEl=document.getElementById('mem-username');
   var newUsername=usernameEl?usernameEl.value.trim():m.username;
   var originalUsername=usernameEl?usernameEl.getAttribute('data-original'):m.username;
-  var phone=document.getElementById('mem-phone').value.trim();
-  var rrn=document.getElementById('mem-rrn').value.trim();
+  var phone=document.getElementById('mem-phone').value.trim().replace(/[^0-9]/g,''); // ★ 전화 정규화
   var tg=document.getElementById('mem-tg').value.trim();
   var memo=document.getElementById('mem-memo').value;
   var newPw=document.getElementById('mem-newpw').value;
@@ -1812,7 +1822,6 @@ async function saveMemberInfo(id){
       username:newUsername,
       real_name:name,
       phone:phone||null,
-      resident_num:rrn||null,
       telegram_id:tg||null,
       memo:memo||null,
       app_type:appType,
@@ -1830,7 +1839,6 @@ async function saveMemberInfo(id){
     m.username=newUsername;
     m.name=name;
     m.phone=phone;
-    m.residentNum=rrn;
     m.telegramId=tg;
     m.memo=memo;
     m.appType=appType;
@@ -1913,7 +1921,7 @@ function renderLicense(){
     list.forEach(function(m){
       var c=ac(m.id);
       var devCnt=(m.devices||[]).length;
-      html+='<tr><td><div class="minfo"><div class="mavatar" style="background:'+c+'22;color:'+c+'">'+(m.name?m.name[0]:'?')+'</div><div><div class="mname">'+m.name+'</div><div class="mid">@'+m.username+'</div></div></div></td>'
+      html+='<tr><td><div class="minfo"><div class="mavatar" style="background:'+c+'22;color:'+c+'">'+(m.name?m.name[0]:'?')+'</div><div><div class="mname">'+m.name+(m.isRejoined?' <span class="badge bg-red" style="font-size:9px" title="과거 탈퇴 이력 번호로 재가입 — 중복/악용 의심 확인">🔁 재가입'+(m.rejoinCount>1?'×'+m.rejoinCount:'')+'</span>':'')+'</div><div class="mid">@'+m.username+'</div></div></div></td>'
       +'<td>'+appBadge(m.appType)+'</td>'
       +'<td style="font-size:11px">'+branchPath(m.branch_id,true)+'</td>'
       +'<td><span class="badge '+(m.plan==='free'?'bg-purple':'bg-green')+'">'+(m.plan==='free'?'무료':'유료')+'</span></td>'
@@ -4030,7 +4038,7 @@ async function saveAccount(){
 // =====================================================================
 function openAddMember(){
   // 입력 필드 초기화
-  ['am-username','am-password','am-realname','am-resident','am-phone'].forEach(id=>{
+  ['am-username','am-password','am-realname','am-phone'].forEach(id=>{
     var el=document.getElementById(id);if(el)el.value='';
   });
   document.getElementById('am-app').value='next';
@@ -4182,7 +4190,6 @@ async function saveTestMember(){
       username:uname,
       password:hashedPw,
       real_name:name,
-      resident_num:'0000001',  // 더미
       phone:'00000000000',  // 더미
       branch_id:parseInt(bid),
       status:'approved',  // 즉시 승인
@@ -4210,8 +4217,7 @@ async function saveAddMember(){
   var uname=document.getElementById('am-username').value.trim();
   var pw=document.getElementById('am-password').value;
   var realName=document.getElementById('am-realname').value.trim();
-  var resident=document.getElementById('am-resident').value.trim();
-  var phone=document.getElementById('am-phone').value.trim();
+  var phone=document.getElementById('am-phone').value.trim().replace(/[^0-9]/g,''); // ★ 전화 정규화
   
   // 검증
   if(!bid){showToast('지점을 선택하세요','error');return;}
@@ -4219,8 +4225,7 @@ async function saveAddMember(){
   if(!/^[a-zA-Z0-9_]+$/.test(uname)){showToast('아이디는 영문/숫자/언더바만 사용 가능합니다','error');return;}
   if(!pw||pw.length<6){showToast('비밀번호는 6자 이상이어야 합니다','error');return;}
   if(!realName){showToast('실명을 입력하세요','error');return;}
-  if(!/^\d{7}$/.test(resident)){showToast('주민등록번호는 앞6자리+뒷1자리 (총 7자리)로 입력하세요','error');return;}
-  if(!phone){showToast('전화번호를 입력하세요','error');return;}
+  if(!phone||phone.length<10||phone.length>11){showToast('전화번호를 정확히 입력하세요','error');return;}
   
   try{
     // 중복 체크
@@ -4232,7 +4237,6 @@ async function saveAddMember(){
       username:uname,
       password:hashedPw,
       real_name:realName,
-      resident_num:resident,
       phone:phone,
       branch_id:parseInt(bid),
       app_type:app,
@@ -4464,11 +4468,13 @@ function renderAccounts(){
 //   - 단 dev 역할 계정, 자기보다 상위/동급 총판은 수정 불가 (산하만)
 function canEditAccount(a){
   if(!a) return false;
-  if(role==='dev') return true;
-  if(curAcc && a.id===curAcc.id) return true;   // 본인
-  // ★ 산하 수정은 총판(master)까지만 허용 (2026-06-11): 지사/지점은 본인 자신 외 수정 불가.
+  if(role==='dev') return true;                   // 개발자: 전부
+  // ★ 수정 권한 정책 (2026-06-11):
+  //   - 지사(branch)/지점(sub) 로그인: 본인 자신 포함 아무 계정도 수정 불가 (위에서만 관리)
+  //   - 총판(master) 로그인: 본인 + 산하 지사/지점 수정 가능 (dev/다른 총판은 불가)
   if(role!=='master') return false;
-  if(a.role==='dev'||a.role==='master') return false; // 총판은 dev/다른 총판 수정 불가
+  if(curAcc && a.id===curAcc.id) return true;     // 총판 본인
+  if(a.role==='dev'||a.role==='master') return false; // 다른 총판/개발자 불가
   if(!a.branch_id) return false;
   var vis=getVisibleBranchIds();                  // 본인 산하 지점 id 목록
   if(!vis || vis.indexOf(a.branch_id)<0) return false;
