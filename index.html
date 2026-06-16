@@ -110,7 +110,7 @@ tr:last-child td{border-bottom:none}tr:hover td{background:rgba(255,255,255,.015
 .mavatar{width:30px;height:30px;border-radius:7px;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;flex-shrink:0}
 .mname{font-size:12px;font-weight:600}.mid{font-size:10px;color:var(--text3)}
 .badge{display:inline-flex;align-items:center;padding:2px 7px;border-radius:5px;font-size:10px;font-weight:700;white-space:nowrap}
-.bg-green{background:rgba(39,174,96,.15);color:#27ae60}.bg-yellow{background:rgba(240,180,41,.15);color:#f0b429}.bg-red{background:rgba(231,76,60,.15);color:#e74c3c}
+.bg-green{background:rgba(39,174,96,.15);color:#27ae60}.bg-yellow{background:rgba(240,180,41,.15);color:#f0b429}.bg-red{background:rgba(231,76,60,.15);color:#e74c3c}.bg-orange{background:rgba(230,126,34,.18);color:#e67e22}
 .bg-blue{background:rgba(41,128,185,.15);color:#2980b9}.bg-purple{background:rgba(142,68,173,.15);color:#8e44ad}.bg-gray{background:rgba(255,255,255,.07);color:var(--text2)}
 .bg-next{background:rgba(0,100,255,.15);color:var(--next)}.bg-grab{background:rgba(0,177,79,.15);color:var(--grab)}
 .bg-dev{background:rgba(231,76,60,.12);color:var(--c-dev)}.bg-master{background:rgba(240,180,41,.12);color:var(--c-master)}.bg-branch{background:rgba(52,152,219,.12);color:var(--c-branch)}.bg-sub{background:rgba(46,204,113,.12);color:var(--c-sub)}
@@ -614,6 +614,7 @@ function thisMonthEnd(){var d=new Date();return new Date(d.getFullYear(),d.getMo
 
 // 데이터 캐시 (Supabase 에서 로드)
 var members=[], payments=[], notices=[], appSettings={};
+var withdrawnList=[]; // ★ 탈퇴 이력 (재가입 의심 대조용)
 // ★ 결제 note 표시용 (2026-06-11): 기기추가 인코딩 마커는 사람이 읽을 토막만 노출
 function displayNote(note){
   if(!note) return '';
@@ -954,6 +955,12 @@ async function loadAllData(){
     
     const {data:deviceData,error:dErr}=await sb.from('user_devices').select('*');
     if(dErr)throw dErr;
+
+    // ★ 탈퇴 이력 로드 (2026-06-11): 재가입/악용 의심 대조용 (테이블 없으면 graceful)
+    try{
+      const {data:wd,error:wErr}=await sb.from('withdrawn_users').select('phone,real_name,withdrawn_at');
+      withdrawnList = (wErr ? [] : (wd||[]));
+    }catch(_){ withdrawnList=[]; }
     
     members=(userData||[]).map(u=>({
       id:u.id,
@@ -1539,6 +1546,48 @@ function initChart(){
 // =====================================================================
 //   MEMBERS — Supabase 연동
 // =====================================================================
+
+// ★ 회원 악용/중복 의심 패턴 판정 (2026-06-11)
+//   현재 회원들끼리 + 탈퇴이력과 대조해 번호/이름 중복을 사유별로 반환.
+//   동명이인 오탐 여지가 있으므로 '차단'이 아니라 '표시' 용도 — 관리자가 최종 판단.
+function normPhone(p){ return (p||'').replace(/[^0-9]/g,''); }
+function normName(n){ return (n||'').replace(/\s/g,'').toLowerCase(); }
+function suspectFlags(m){
+  var flags=[];
+  var myPhone=normPhone(m.phone), myName=normName(m.name);
+  // (a) 현재 회원 중 같은 번호 / 같은 이름 (자기 자신 제외)
+  var samePhone=0, sameName=0, sameNameDiffPhone=0;
+  members.forEach(function(o){
+    if(o.id===m.id) return;
+    var op=normPhone(o.phone), on=normName(o.name);
+    if(myPhone && op===myPhone) samePhone++;
+    if(myName && on===myName){
+      sameName++;
+      if(myPhone && op && op!==myPhone) sameNameDiffPhone++;
+    }
+  });
+  // (b) 탈퇴 이력과 같은 번호 / 같은 이름
+  var wdPhone=0, wdName=0;
+  (withdrawnList||[]).forEach(function(w){
+    var wp=normPhone(w.phone), wn=normName(w.real_name);
+    if(myPhone && wp===myPhone) wdPhone++;
+    if(myName && wn===myName) wdName++;
+  });
+  if(samePhone>0) flags.push({t:'번호중복', d:'현재 회원 중 같은 전화번호 '+samePhone+'명', c:'bg-red'});
+  if(wdPhone>0)   flags.push({t:'재가입(번호)', d:'과거 탈퇴한 번호로 재가입', c:'bg-red'});
+  if(sameNameDiffPhone>0) flags.push({t:'이름중복/번호상이', d:'같은 이름·다른 번호 '+sameNameDiffPhone+'명 — 명의 의심', c:'bg-orange'});
+  else if(sameName>0) flags.push({t:'이름중복', d:'현재 회원 중 같은 이름 '+sameName+'명', c:'bg-orange'});
+  if(wdName>0)    flags.push({t:'재가입(이름)', d:'과거 탈퇴자와 같은 이름', c:'bg-orange'});
+  return flags;
+}
+function suspectBadgeHtml(m){
+  var f=suspectFlags(m);
+  if(!f.length) return '';
+  return f.map(function(x){
+    return ' <span class="badge '+x.c+'" style="font-size:9px" title="'+x.d+'">⚠ '+x.t+'</span>';
+  }).join('');
+}
+
 function renderMembers(){
   // ★ 권한 격리 + platform 필터
   var visMembers=members.filter(memberIsVisible).filter(memberMatchesPlatform);
@@ -1597,7 +1646,7 @@ function renderMembers(){
     html+='<div class="tw"><table><thead><tr><th>기사</th><th>앱</th><th>소속</th><th>전화</th><th>가입일</th><th>상태</th><th>이용권</th><th>D-day</th><th>관리</th></tr></thead><tbody>';
     list.forEach(function(m){
       var c=ac(m.id);
-      html+='<tr><td><div class="minfo"><div class="mavatar" style="background:'+c+'22;color:'+c+'">'+(m.name?m.name[0]:'?')+'</div><div><div class="mname">'+m.name+(m.isRejoined?' <span class="badge bg-red" style="font-size:9px" title="과거 탈퇴 이력 번호로 재가입 — 중복/악용 의심 확인">🔁 재가입'+(m.rejoinCount>1?'×'+m.rejoinCount:'')+'</span>':'')+'</div><div class="mid">@'+m.username+'</div></div></div></td>'
+      html+='<tr><td><div class="minfo"><div class="mavatar" style="background:'+c+'22;color:'+c+'">'+(m.name?m.name[0]:'?')+'</div><div><div class="mname">'+m.name+suspectBadgeHtml(m)+'</div><div class="mid">@'+m.username+'</div></div></div></td>'
       +'<td>'+appBadge(m.appType)+'</td>'
       +'<td style="font-size:11px">'+branchPath(m.branch_id,true)+'</td>'
       +'<td style="font-size:11px">'+(m.phone||'-')+'</td>'
@@ -1921,7 +1970,7 @@ function renderLicense(){
     list.forEach(function(m){
       var c=ac(m.id);
       var devCnt=(m.devices||[]).length;
-      html+='<tr><td><div class="minfo"><div class="mavatar" style="background:'+c+'22;color:'+c+'">'+(m.name?m.name[0]:'?')+'</div><div><div class="mname">'+m.name+(m.isRejoined?' <span class="badge bg-red" style="font-size:9px" title="과거 탈퇴 이력 번호로 재가입 — 중복/악용 의심 확인">🔁 재가입'+(m.rejoinCount>1?'×'+m.rejoinCount:'')+'</span>':'')+'</div><div class="mid">@'+m.username+'</div></div></div></td>'
+      html+='<tr><td><div class="minfo"><div class="mavatar" style="background:'+c+'22;color:'+c+'">'+(m.name?m.name[0]:'?')+'</div><div><div class="mname">'+m.name+suspectBadgeHtml(m)+'</div><div class="mid">@'+m.username+'</div></div></div></td>'
       +'<td>'+appBadge(m.appType)+'</td>'
       +'<td style="font-size:11px">'+branchPath(m.branch_id,true)+'</td>'
       +'<td><span class="badge '+(m.plan==='free'?'bg-purple':'bg-green')+'">'+(m.plan==='free'?'무료':'유료')+'</span></td>'
