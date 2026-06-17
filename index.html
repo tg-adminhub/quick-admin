@@ -978,6 +978,10 @@ async function loadAllData(){
       branch_id:u.branch_id,  // ★ 권한 격리에 필요
       isRejoined:u.is_rejoined||false,  // ★ 재가입(과거 탈퇴이력) 여부 (2026-06-11)
       rejoinCount:u.rejoin_count||0,
+      isNew:(u.is_new===true && !u.is_free_user),  // ★ 신규 = 신규플래그 ON + 무료 아님 (가입~신규50일승인 전, 2026-06-11)
+      paused:u.paused||false,           // ★ 정지 여부
+      pausedRemaining:u.paused_remaining_days||0,
+      licenseExpiresAt:u.license_expires_at, // ★ 정지/연장 계산용 원본 ISO
       extraSlots:u.extra_phone_slots||0,
       approvedAt:u.approved_at,
       lastLoginAt:u.last_login_at,
@@ -1580,6 +1584,13 @@ function suspectFlags(m){
   if(wdName>0)    flags.push({t:'재가입(이름)', d:'과거 탈퇴자와 같은 이름', c:'bg-orange'});
   return flags;
 }
+// ★ 신규/정지 상태 뱃지 (2026-06-11)
+function statusBadgeHtml(m){
+  var h='';
+  if(m.paused) h+=' <span class="badge bg-red" style="font-size:9px" title="이용 정지중 — 기간 멈춤, 로그인 차단">⏸ 정지</span>';
+  if(m.isNew)  h+=' <span class="badge" style="font-size:9px;background:rgba(52,152,219,.18);color:#3498db" title="신규 회원 — 신규 연장(50일) 승인 전">🆕 신규</span>';
+  return h;
+}
 function suspectBadgeHtml(m){
   var f=suspectFlags(m);
   if(!f.length) return '';
@@ -1670,7 +1681,7 @@ function renderMembers(){
     html+='<div class="tw"><table><thead><tr><th>기사</th><th>앱</th><th>소속</th><th>전화</th><th>가입일</th><th>상태</th><th>이용권</th><th>D-day</th><th>관리</th></tr></thead><tbody>';
     list.forEach(function(m){
       var c=ac(m.id);
-      html+='<tr><td><div class="minfo"><div class="mavatar" style="background:'+c+'22;color:'+c+'">'+(m.name?m.name[0]:'?')+'</div><div><div class="mname">'+m.name+suspectBadgeHtml(m)+'</div><div class="mid">@'+m.username+'</div></div></div></td>'
+      html+='<tr><td><div class="minfo"><div class="mavatar" style="background:'+c+'22;color:'+c+'">'+(m.name?m.name[0]:'?')+'</div><div><div class="mname">'+m.name+statusBadgeHtml(m)+suspectBadgeHtml(m)+'</div><div class="mid">@'+m.username+'</div></div></div></td>'
       +'<td>'+appBadge(m.appType)+'</td>'
       +'<td style="font-size:11px">'+branchPath(m.branch_id,true)+'</td>'
       +'<td style="font-size:11px">'+(m.phone||'-')+'</td>'
@@ -1680,6 +1691,7 @@ function renderMembers(){
       +'<td>'+(m.status==='approved'?expBadge(m.expire):'-')+'</td>'
       +'<td><div style="display:flex;gap:4px;flex-wrap:wrap">'
       +(m.status==='pending'?'<button class="btn btn-s btn-sm" onclick="approveM('+m.id+')">승인</button><button class="btn btn-d btn-sm" onclick="rejectM('+m.id+')">거절</button><button class="btn btn-g btn-sm" onclick="showMember('+m.id+')">상세</button>':'<button class="btn btn-g btn-sm" onclick="showMember('+m.id+')">상세</button>')
+      +(m.status==='approved'?'<button class="btn btn-sm" style="background:'+(m.paused?'#e74c3c':'#3498db')+';color:#fff" onclick="togglePause('+m.id+')" title="'+(m.paused?'정지 해제':'이용기간 정지')+'">'+(m.paused?'⏸ 정지중':'정지')+'</button>':'')
       +'<button class="btn btn-d btn-sm" onclick="deleteM('+m.id+')">삭제</button>'
       +'</div></td></tr>';
     });
@@ -1705,6 +1717,7 @@ async function approveM(id){
       status:'approved',
       approved_at:new Date().toISOString(),
       license_expires_at:expireAt,
+      is_new:true,  // ★ 가입 승인 = 신규 시작 (2026-06-11)
       is_free_user:false
     }).eq('id',id);
     if(error)throw error;
@@ -1730,6 +1743,53 @@ async function rejectM(id){
     navigate('members');
   }catch(e){
     showToast('거절 실패: '+e.message,'error');
+  }
+}
+
+// ★ 회원 이용기간 정지/해제 토글 (2026-06-11)
+//   정지: 현재 남은 일수를 저장하고 만료일을 비워(=정지중 카운트 안 됨) 로그인 차단.
+//   해제: 저장해둔 남은 일수만큼 오늘부터 다시 만료일 부여 (그만큼 다시 카운트).
+async function togglePause(id){
+  var m=members.find(function(x){return x.id===id;});
+  if(!m)return;
+  try{
+    if(!m.paused){
+      // ─ 정지 ─ 현재 남은 일수 계산
+      var remain=0;
+      if(m.licenseExpiresAt){
+        var diff=new Date(m.licenseExpiresAt).getTime()-Date.now();
+        remain=Math.max(0, Math.ceil(diff/86400000));
+      }
+      if(!confirm(m.name+' 회원을 정지하시겠습니까?\n\n남은 '+remain+'일이 보존되며, 정지 동안 기간이 줄지 않습니다.\n정지된 회원은 로그인이 차단됩니다.'))return;
+      // 정지 중 만료 방지: 만료일을 먼 미래(+10년)로 임시 이동. 해제 시 보존일로 재계산하므로 임시값일 뿐.
+      var farFuture=new Date(); farFuture.setFullYear(farFuture.getFullYear()+10);
+      var {error}=await sb.from('users').update({
+        paused:true,
+        paused_remaining_days:remain,
+        paused_at:new Date().toISOString(),
+        license_expires_at:farFuture.toISOString()
+      }).eq('id',id);
+      if(error)throw error;
+      showToast('⏸ '+m.name+' 정지됨 (남은 '+remain+'일 보존)','success');
+    } else {
+      // ─ 해제 ─ 보존된 남은 일수로 오늘부터 다시 만료일 부여
+      var days=m.pausedRemaining||0;
+      if(!confirm(m.name+' 회원의 정지를 해제하시겠습니까?\n\n오늘부터 '+days+'일 후 만료로 재설정됩니다.'))return;
+      var newExp=new Date();
+      newExp.setDate(newExp.getDate()+days);
+      var {error}=await sb.from('users').update({
+        paused:false,
+        paused_remaining_days:0,
+        paused_at:null,
+        license_expires_at:newExp.toISOString()
+      }).eq('id',id);
+      if(error)throw error;
+      showToast('▶ '+m.name+' 정지 해제 ('+days+'일 재부여)','success');
+    }
+    await loadAllData();
+    navigate('members');
+  }catch(e){
+    showToast('정지 처리 실패: '+e.message,'error');
   }
 }
 
@@ -2014,7 +2074,7 @@ function renderLicense(){
     list.forEach(function(m){
       var c=ac(m.id);
       var devCnt=(m.devices||[]).length;
-      html+='<tr><td><div class="minfo"><div class="mavatar" style="background:'+c+'22;color:'+c+'">'+(m.name?m.name[0]:'?')+'</div><div><div class="mname">'+m.name+suspectBadgeHtml(m)+'</div><div class="mid">@'+m.username+'</div></div></div></td>'
+      html+='<tr><td><div class="minfo"><div class="mavatar" style="background:'+c+'22;color:'+c+'">'+(m.name?m.name[0]:'?')+'</div><div><div class="mname">'+m.name+statusBadgeHtml(m)+suspectBadgeHtml(m)+'</div><div class="mid">@'+m.username+'</div></div></div></td>'
       +'<td>'+appBadge(m.appType)+'</td>'
       +'<td style="font-size:11px">'+branchPath(m.branch_id,true)+'</td>'
       +'<td><span class="badge '+(m.plan==='free'?'bg-purple':'bg-green')+'">'+(m.plan==='free'?'무료':'유료')+'</span></td>'
@@ -2636,7 +2696,14 @@ function renderPayment(){
       +'<td>'+procHtml+'</td>'
       +'<td><span class="badge '+(p.status==='pending'?'bg-yellow':p.status==='approved'?'bg-green':'bg-red')+'">'+(p.status==='pending'?'대기':p.status==='approved'?'승인':'거절')+'</span></td>'
       +'<td><div style="display:flex;gap:4px">'
-      +(isPending?'<button class="btn btn-s btn-sm" onclick="approveP('+p.id+')">승인</button><button class="btn btn-d btn-sm" onclick="rejectP('+p.id+')">거절</button>':'<span style="font-size:11px;color:var(--text3)">완료</span>')
+      +(isPending?((function(){
+          // ★ 신규 회원 + 일반결제(기기추가 아님)면 '신규승인(50일)' 버튼 별도 제공 (2026-06-11)
+          var pm=members.find(function(x){return x.id===p.userId;});
+          var newBtn=(pm && pm.isNew && !isDevAddRow)
+            ? '<button class="btn btn-sm" style="background:#3498db;color:#fff" onclick="approveP('+p.id+',false,true)" title="신규 연장 — 잔여기간 + 50일">🆕 신규승인</button>'
+            : '';
+          return newBtn+'<button class="btn btn-s btn-sm" onclick="approveP('+p.id+')">승인</button><button class="btn btn-d btn-sm" onclick="rejectP('+p.id+')">거절</button>';
+        })()):'<span style="font-size:11px;color:var(--text3)">완료</span>')
       +(role==='dev'?' <button class="btn btn-d btn-sm" onclick="deletePayment('+p.id+')" title="개발자 전용 삭제">🗑</button>':'')
       +'</div></td></tr>';
     });
@@ -3191,7 +3258,7 @@ function setPF(f){
   navigate('payment');
 }
 
-async function approveP(id, skipConfirm){
+async function approveP(id, skipConfirm, isNewApproval){
   var p=payments.find(x=>x.id===id);if(!p)return;
   
   // ★ 보안: 본인이 본인 결제 승인 금지 (dev 만 가능)
@@ -3213,7 +3280,7 @@ async function approveP(id, skipConfirm){
       msg+='\n\n승인 시 이 기기가 실제로 추가됩니다. (이용권 연장 없음)';
     } else {
       if(p.note){msg+='\n입금자명: '+p.note;}
-      msg+='\n\n승인 시 회원의 이용권 만료일이 오늘부터 40일 후로 설정됩니다.';
+      msg+='\n\n승인 시 '+(isNewApproval?'[신규] 잔여기간 + 50일':'40일')+' 연장됩니다.';
     }
     if(!confirm(msg))return;
   }
@@ -3273,16 +3340,19 @@ async function approveP(id, skipConfirm){
         }
       }
       newExpire = new Date(base.getTime());
-      newExpire.setDate(newExpire.getDate()+40);
-      const {error:ue}=await sb.from('users').update({
+      var addDays = isNewApproval ? 50 : 40;  // ★ 신규 승인이면 50일 (2026-06-11)
+      newExpire.setDate(newExpire.getDate()+addDays);
+      var updPayload = {
         license_expires_at:newExpire.toISOString(),
         is_free_user:false
-      }).eq('id',p.userId);
+      };
+      if(isNewApproval) updPayload.is_new=false; // ★ 신규 50일 승인 → 신규 졸업 (2026-06-11)
+      const {error:ue}=await sb.from('users').update(updPayload).eq('id',p.userId);
       if(ue)throw ue;
     }
     
     if(!skipConfirm){
-      showToast('결제 승인 + 이용권 40일 연장 완료','success');
+      showToast('결제 승인 + 이용권 '+(isNewApproval?'[신규] 50':'40')+'일 연장 완료','success');
       await loadAllData();
       navigate('payment');
     }
