@@ -1575,13 +1575,20 @@ function initChart(){
 //   동명이인 오탐 여지가 있으므로 '차단'이 아니라 '표시' 용도 — 관리자가 최종 판단.
 function normPhone(p){ return (p||'').replace(/[^0-9]/g,''); }
 function normName(n){ return (n||'').replace(/\s/g,'').toLowerCase(); }
+// ★ 앱 그룹: next/toss(구회원) = 토스, grab = 그랩 (2026-06-17)
+function appGroup(at){ return (at==='grab')?'grab':'next'; }
 function suspectFlags(m){
   var flags=[];
   var myPhone=normPhone(m.phone), myName=normName(m.name);
+  var myG=appGroup(m.appType);
   // (a) 현재 회원 중 같은 번호 / 같은 이름 (자기 자신 제외)
   var samePhone=0, sameName=0, sameNameDiffPhone=0;
   members.forEach(function(o){
     if(o.id===m.id) return;
+    // ★ 토스/그랩 둘 다 가입한 동일인은 중복으로 보지 않음 (2026-06-17):
+    //   다른 앱(next↔grab)에 같은 번호·이름이 있는 건 설계상 허용된 같은 사람이므로 제외.
+    //   같은 앱 그룹 안에서 같은 번호/이름이 있을 때만 진짜 중복으로 카운트.
+    if(appGroup(o.appType)!==myG) return;
     var op=normPhone(o.phone), on=normName(o.name);
     if(myPhone && op===myPhone) samePhone++;
     if(myName && on===myName){
@@ -1666,7 +1673,28 @@ function renderMembers(){
     }
     return true;
   });
-  
+
+  // ★ 같은 사람(전화번호 기준) 행끼리 인접 정렬 (2026-06-17):
+  //   토스/그랩 둘 다 가입한 회원의 두 행이 목록에서 멀리 떨어져 보이던 문제 →
+  //   같은 번호끼리 묶어 바로 옆에 오도록. 묶음 순서는 그 사람의 가장 최근 가입일 기준
+  //   (전체 목록은 기존 '최신 가입 먼저' 느낌 유지), 묶음 내부는 최신 행 먼저.
+  (function(){
+    function ck(m){ var p=normPhone(m.phone); if(p) return 'p:'+p; var n=normName(m.name); return n?('n:'+n):('id:'+m.id); }
+    var maxT={};
+    list.forEach(function(m){
+      var k=ck(m), t=m.createdAt?new Date(m.createdAt).getTime():0;
+      if(maxT[k]===undefined||t>maxT[k]) maxT[k]=t;
+    });
+    list.sort(function(a,b){
+      var ka=ck(a), kb=ck(b);
+      if(maxT[kb]!==maxT[ka]) return maxT[kb]-maxT[ka];   // 묶음: 최근 가입 묶음 먼저
+      if(ka!==kb) return ka<kb?-1:1;                       // 동시각 묶음은 키로 안정 정렬
+      var ta=a.createdAt?new Date(a.createdAt).getTime():0;
+      var tb=b.createdAt?new Date(b.createdAt).getTime():0;
+      return tb-ta;                                        // 묶음 내부는 최신 먼저
+    });
+  })();
+
   var sb_={approved:'bg-green',pending:'bg-yellow',rejected:'bg-red',suspended:'bg-gray'};
   var sl={approved:'승인',pending:'대기',rejected:'거절',suspended:'정지'};
   
@@ -1868,7 +1896,7 @@ async function deleteM(id){
 
 function showMember(id){
   var m=members.find(function(x){return x.id===id;});if(!m)return;
-  document.getElementById('modal-member-title').textContent='👤 '+m.name+' 회원 정보';
+  document.getElementById('modal-member-title').textContent='👤 '+m.name+' 회원 정보 ('+(appGroup(m.appType)==='grab'?'🛵 그랩':'🚗 토스')+')';
   
   // 상태 라벨 + 색상
   var sb_={approved:'bg-green',pending:'bg-yellow',rejected:'bg-red',suspended:'bg-gray'};
@@ -1966,7 +1994,37 @@ function showMember(id){
     +'<button class="btn btn-p" style="flex:2" onclick="saveMemberInfo('+m.id+')">💾 회원 정보 저장</button>'
     +'</div>';
   
-  document.getElementById('modal-member-body').innerHTML=infoHtml+formHtml;
+  // ★ 같은 사람의 다른 앱 계정 연결 표시 (2026-06-17):
+  //   토스/그랩 각각 가입한 동일인(같은 전화번호)을 상세 모달 상단에 모아 보여주고,
+  //   클릭하면 해당 앱 계정 상세로 전환. 각 계정은 별개라 기간·결제·수정/저장은 계정별로 처리됨.
+  var linkedHtml='';
+  (function(){
+    var myPhone=normPhone(m.phone);
+    if(!myPhone) return;
+    var group=members.filter(function(o){ return normPhone(o.phone)===myPhone; });
+    if(group.length<2) return;
+    group.sort(function(a,b){ var ga=appGroup(a.appType), gb=appGroup(b.appType); if(ga===gb) return 0; return ga==='grab'?1:-1; });
+    var chips=group.map(function(g){
+      var isCur=(g.id===m.id);
+      var ag=appGroup(g.appType);
+      var col=(ag==='grab')?'var(--grab)':'var(--next)';
+      var icon=(ag==='grab')?'🛵 그랩':'🚗 토스';
+      var dday=(g.status==='approved'&&g.expire)?expBadge(g.expire):'';
+      var plan='<span class="badge '+(g.plan==='free'?'bg-purple':'bg-green')+'" style="font-size:9px">'+(g.plan==='free'?'무료':'유료')+'</span>';
+      return '<div'+(isCur?'':' onclick="showMember('+g.id+')"')+' style="flex:1;min-width:130px;cursor:'+(isCur?'default':'pointer')+';background:var(--bg4);border:2px solid '+(isCur?col:'var(--border)')+';border-radius:8px;padding:8px 10px">'
+        +'<div style="font-size:12px;font-weight:600;color:'+col+'">'+icon+(isCur?' <span style="font-size:9px;color:var(--text3)">(보는 중)</span>':'')+'</div>'
+        +'<div style="font-size:11px;color:var(--text2);margin-top:2px">@'+g.username+'</div>'
+        +'<div style="margin-top:4px;display:flex;gap:4px;align-items:center;flex-wrap:wrap">'+plan+dday+'</div>'
+        +'</div>';
+    }).join('');
+    linkedHtml='<div class="alert" style="background:rgba(52,152,219,.10);border:1px solid rgba(52,152,219,.35);margin-bottom:12px">'
+      +'<div style="font-weight:600;color:#3498db;margin-bottom:6px;font-size:12px">📱 토스·그랩 둘 다 사용 중인 회원 — 계정별 관리</div>'
+      +'<div style="display:flex;gap:8px;flex-wrap:wrap">'+chips+'</div>'
+      +'<div style="font-size:10px;color:var(--text3);margin-top:6px">클릭하면 해당 앱 계정 상세로 전환됩니다. 각 계정은 기간·결제가 따로입니다.</div>'
+      +'</div>';
+  })();
+
+  document.getElementById('modal-member-body').innerHTML=linkedHtml+infoHtml+formHtml;
   document.getElementById('modal-member').classList.add('open');
 }
 
