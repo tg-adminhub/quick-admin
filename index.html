@@ -750,6 +750,24 @@ function branchPath(branchId,short){
 }
 
 // ★ 사용 앱 배지 (토스/그랩)
+// ★ 한 사람이 토스+그랩 둘 다 쓰는지 판별해 뱃지 표시 (2026-06-11)
+//   같은 전화번호 또는 같은 이름의 다른-app_type 계정이 있으면 둘 다 표시.
+function appBadgeMulti(m){
+  var types={};
+  types[(m.appType==='grab')?'grab':'next']=true;
+  try{
+    var myP=normPhone(m.phone), myN=normName(m.name);
+    (members||[]).forEach(function(o){
+      if(o.id===m.id) return;
+      var samePerson=(myP && normPhone(o.phone)===myP) || (myN && normName(o.name)===myN);
+      if(samePerson) types[(o.appType==='grab')?'grab':'next']=true;
+    });
+  }catch(e){}
+  var h='';
+  if(types['next']) h+='<span class="badge bg-next" style="font-size:10px">🚗 토스</span>';
+  if(types['grab']) h+=(h?' ':'')+'<span class="badge bg-grab" style="font-size:10px">🛵 그랩</span>';
+  return h||appBadge(m.appType);
+}
 function appBadge(appType){
   if(appType==='grab'){
     return '<span class="badge bg-grab" style="font-size:10px">🛵 그랩</span>';
@@ -988,7 +1006,7 @@ async function loadAllData(){
       createdAt:u.created_at,
       // 호환성 필드
       orgType:'sub',orgId:'manual',
-      devices:[{num:1,label:'1'+(u.real_name||u.username),platform:u.app_type||'next',fee:0,main:true}].concat(
+      devices:[{num:1,label:'1'+(u.real_name||u.username),platform:u.app_type||'next',fee:0,main:true,androidId:u.main_android_id||null}].concat(
         (deviceData||[]).filter(d=>d.user_id===u.id).map((d,i)=>({
           id:d.id,
           num:i+2,
@@ -997,7 +1015,8 @@ async function loadAllData(){
           fee:DEV_FEE,
           main:false,
           phone:d.phone_number,
-          phone_number:d.phone_number
+          phone_number:d.phone_number,
+          androidId:d.android_id||null
         }))
       )
     }));
@@ -1682,7 +1701,7 @@ function renderMembers(){
     list.forEach(function(m){
       var c=ac(m.id);
       html+='<tr><td><div class="minfo"><div class="mavatar" style="background:'+c+'22;color:'+c+'">'+(m.name?m.name[0]:'?')+'</div><div><div class="mname">'+m.name+statusBadgeHtml(m)+suspectBadgeHtml(m)+'</div><div class="mid">@'+m.username+'</div></div></div></td>'
-      +'<td>'+appBadge(m.appType)+'</td>'
+      +'<td>'+appBadgeMulti(m)+'</td>'
       +'<td style="font-size:11px">'+branchPath(m.branch_id,true)+'</td>'
       +'<td style="font-size:11px">'+(m.phone||'-')+'</td>'
       +'<td style="font-size:11px;color:var(--text2)">'+isoToFd(m.createdAt)+'</td>'
@@ -1749,6 +1768,28 @@ async function rejectM(id){
 // ★ 회원 이용기간 정지/해제 토글 (2026-06-11)
 //   정지: 현재 남은 일수를 저장하고 만료일을 비워(=정지중 카운트 안 됨) 로그인 차단.
 //   해제: 저장해둔 남은 일수만큼 오늘부터 다시 만료일 부여 (그만큼 다시 카운트).
+// ★ 기기 바인딩 초기화 (2026-06-11): 폰 교체/재바인딩용 — android_id 를 비워 다음 로그인 기기를 새로 받음
+async function resetDeviceBind(ev, userId, isMain, devId){
+  if(ev) ev.preventDefault();
+  if(!confirm('이 기기 연결을 초기화할까요?\n\n다음에 로그인하는 기기가 이 슬롯에 새로 연결됩니다.\n(폰 교체 시 사용)'))return;
+  try{
+    if(isMain===true || isMain==='true'){
+      var {error}=await sb.from('users').update({main_android_id:null}).eq('id',userId);
+      if(error)throw error;
+    } else {
+      var {error}=await sb.from('user_devices').update({android_id:null}).eq('id',devId);
+      if(error)throw error;
+    }
+    showToast('기기 연결 초기화됨 — 다음 로그인 기기가 연결됩니다','success');
+    await loadAllData();
+    // 모달 열려있으면 갱신
+    var m=members.find(function(x){return x.id===userId;});
+    if(m && typeof renderDevList==='function') renderDevList(m);
+  }catch(e){
+    showToast('초기화 실패: '+e.message,'error');
+  }
+}
+
 async function togglePause(id){
   var m=members.find(function(x){return x.id===id;});
   if(!m)return;
@@ -2075,7 +2116,7 @@ function renderLicense(){
       var c=ac(m.id);
       var devCnt=(m.devices||[]).length;
       html+='<tr><td><div class="minfo"><div class="mavatar" style="background:'+c+'22;color:'+c+'">'+(m.name?m.name[0]:'?')+'</div><div><div class="mname">'+m.name+statusBadgeHtml(m)+suspectBadgeHtml(m)+'</div><div class="mid">@'+m.username+'</div></div></div></td>'
-      +'<td>'+appBadge(m.appType)+'</td>'
+      +'<td>'+appBadgeMulti(m)+'</td>'
       +'<td style="font-size:11px">'+branchPath(m.branch_id,true)+'</td>'
       +'<td><span class="badge '+(m.plan==='free'?'bg-purple':'bg-green')+'">'+(m.plan==='free'?'무료':'유료')+'</span></td>'
       +'<td><button class="btn btn-b btn-sm" onclick="openDevModal('+m.id+')">📱 '+devCnt+'대 관리</button></td>'
@@ -2169,6 +2210,7 @@ function renderDevList(m){
       +(isPendingRemove?' <span style="font-size:9px;color:var(--red);background:rgba(231,76,60,.15);padding:1px 5px;border-radius:3px;margin-left:3px">⏳ 삭제 예정</span>':'')
       +'</div>'
       +(dev.phone?'<div style="font-size:11px;color:var(--accent);margin-top:2px;font-family:monospace">📞 '+dev.phone+'</div>':'')
+      +'<div style="font-size:10px;margin-top:2px;color:'+(dev.androidId?'#27ae60':'var(--text3)')+'">'+(dev.androidId?'🔗 기기 연결됨':'⚪ 미연결(첫 로그인 대기)')+(dev.androidId?' <a href="#" onclick="resetDeviceBind(event,'+m.id+','+(dev.main?'true':'false')+','+(dev.id||0)+')" style="color:#e74c3c;margin-left:4px">초기화</a>':'')+'</div>'
       +'</div>'
       +'</div>'
       +'<div style="display:flex;align-items:center;gap:6px">';
