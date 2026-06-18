@@ -1616,15 +1616,20 @@ function suspectFlags(m){
   return flags;
 }
 // ★ 신규/정지 상태 뱃지 (2026-06-11)
+// ★ 가입 후 경과일 — 배지 자동 숨김 판단용 (2026-06-17)
+function badgeAgeDays(m){ var t=(m&&m.createdAt)?new Date(m.createdAt).getTime():0; return t?((Date.now()-t)/86400000):99999; }
 function statusBadgeHtml(m){
   var h='';
   if(m.paused) h+=' <span class="badge bg-red" style="font-size:9px" title="이용 정지중 — 기간 멈춤, 로그인 차단">⏸ 정지</span>';
-  if(m.isNew)  h+=' <span class="badge" style="font-size:9px;background:rgba(52,152,219,.18);color:#3498db" title="신규 회원 — 신규 연장(50일) 승인 전">🆕 신규</span>';
+  // 🆕 신규: 가입 40일 지나면 자동으로 사라짐 (2026-06-17)
+  if(m.isNew && badgeAgeDays(m)<40)  h+=' <span class="badge" style="font-size:9px;background:rgba(52,152,219,.18);color:#3498db" title="신규 회원 — 신규 연장(50일) 승인 전">🆕 신규</span>';
   return h;
 }
-function suspectBadgeHtml(m){
+// mode: 'list'(기본) = 가입 14일 지나면 목록에서 숨김(지저분 방지) / 'detail' = 상세는 항상 표시 (2026-06-17)
+function suspectBadgeHtml(m, mode){
   var f=suspectFlags(m);
   if(!f.length) return '';
+  if(mode!=='detail' && badgeAgeDays(m)>=14) return '';
   return f.map(function(x){
     return ' <span class="badge '+x.c+'" style="font-size:9px" title="'+x.d+'">⚠ '+x.t+'</span>';
   }).join('');
@@ -2057,7 +2062,18 @@ function showMember(id){
       +'</div>';
   })();
 
-  document.getElementById('modal-member-body').innerHTML=linkedHtml+infoHtml+formHtml;
+  // ★ 악용 의심 배지 — 상세에서는 가입 경과와 무관하게 항상 표시 (2026-06-17):
+  //   목록은 14일 후 깔끔하게 숨기되, 상세 들어오면 여기(정보 박스 아래)에서 계속 확인 가능.
+  var suspectDetailHtml='';
+  (function(){
+    var sb=suspectBadgeHtml(m,'detail');
+    if(!sb) return;
+    suspectDetailHtml='<div class="alert" style="background:rgba(231,76,60,.10);border:1px solid rgba(231,76,60,.35);margin-bottom:12px;padding:10px">'
+      +'<div style="font-size:11px;color:var(--text2);margin-bottom:5px;font-weight:600">⚠ 주의 표시 <span style="color:var(--text3);font-weight:400">(목록에선 14일 후 숨김 · 상세엔 계속 표시)</span></div>'
+      +'<div style="display:flex;flex-wrap:wrap;gap:4px;align-items:center">'+sb+'</div></div>';
+  })();
+
+  document.getElementById('modal-member-body').innerHTML=linkedHtml+infoHtml+suspectDetailHtml+formHtml;
   document.getElementById('modal-member').classList.add('open');
 }
 
