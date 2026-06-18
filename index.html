@@ -1577,6 +1577,11 @@ function normPhone(p){ return (p||'').replace(/[^0-9]/g,''); }
 function normName(n){ return (n||'').replace(/\s/g,'').toLowerCase(); }
 // ★ 앱 그룹: next/toss(구회원) = 토스, grab = 그랩 (2026-06-17)
 function appGroup(at){ return (at==='grab')?'grab':'next'; }
+// ★ 같은 전화번호(동일인) 계정 그룹을 토스 먼저·그랩 나중으로 정렬 (2026-06-17)
+function sortTossFirst(arr){ arr.sort(function(a,b){var ga=appGroup(a.appType),gb=appGroup(b.appType);return ga===gb?0:(ga==='grab'?1:-1);}); return arr; }
+// ★ pool(보통 현재 필터된 list) 안에서 m과 같은 전화번호인 계정들을 묶어 반환 (토스 먼저)
+function personGroupIn(m, pool){ var p=normPhone(m.phone); var arr=p?pool.filter(function(o){return normPhone(o.phone)===p;}):[m]; return sortTossFirst(arr); }
+function personKey(m){ return normPhone(m.phone)||('id'+m.id); }
 function suspectFlags(m){
   var flags=[];
   var myPhone=normPhone(m.phone), myName=normName(m.name);
@@ -1726,21 +1731,49 @@ function renderMembers(){
     html+='<div class="empty"><div class="empty-icon">👤</div><div class="empty-txt">'+(members.length===0?'아직 가입한 회원이 없습니다':'해당 조건의 회원이 없습니다')+'</div></div>';
   } else {
     html+='<div class="tw"><table><thead><tr><th>기사</th><th>앱</th><th>소속</th><th>전화</th><th>가입일</th><th>상태</th><th>이용권</th><th>D-day</th><th>관리</th></tr></thead><tbody>';
+    var seenM={};
     list.forEach(function(m){
+      var pk=personKey(m);
+      if(seenM[pk]) return;       // ★ 같은 사람(전화번호)은 한 줄로만 (2026-06-17)
+      seenM[pk]=true;
+      var grp=personGroupIn(m, list);
       var c=ac(m.id);
-      html+='<tr><td><div class="minfo"><div class="mavatar" style="background:'+c+'22;color:'+c+'">'+(m.name?m.name[0]:'?')+'</div><div><div class="mname">'+m.name+statusBadgeHtml(m)+suspectBadgeHtml(m)+'</div><div class="mid">@'+m.username+'</div></div></div></td>'
-      +'<td>'+appBadgeMulti(m)+'</td>'
-      +'<td style="font-size:11px">'+branchPath(m.branch_id,true)+'</td>'
-      +'<td style="font-size:11px">'+(m.phone||'-')+'</td>'
-      +'<td style="font-size:11px;color:var(--text2)">'+isoToFd(m.createdAt)+'</td>'
-      +'<td><span class="badge '+(sb_[m.status]||'bg-gray')+'">'+(sl[m.status]||m.status)+'</span></td>'
-      +'<td><span class="badge '+(m.plan==='free'?'bg-purple':'bg-green')+'">'+(m.plan==='free'?'무료':'유료')+'</span></td>'
-      +'<td>'+(m.status==='approved'?expBadge(m.expire):'-')+'</td>'
-      +'<td><div style="display:flex;gap:4px;flex-wrap:wrap">'
-      +(m.status==='pending'?'<button class="btn btn-s btn-sm" onclick="approveM('+m.id+')">승인</button><button class="btn btn-d btn-sm" onclick="rejectM('+m.id+')">거절</button><button class="btn btn-g btn-sm" onclick="showMember('+m.id+')">상세</button>':'<button class="btn btn-g btn-sm" onclick="showMember('+m.id+')">상세</button>')
-      +(m.status==='approved'?'<button class="btn btn-sm" style="background:'+(m.paused?'#e74c3c':'#3498db')+';color:#fff" onclick="togglePause('+m.id+')" title="'+(m.paused?'정지 해제':'이용기간 정지')+'">'+(m.paused?'⏸ 정지중':'정지')+'</button>':'')
-      +'<button class="btn btn-d btn-sm" onclick="deleteM('+m.id+')">삭제</button>'
-      +'</div></td></tr>';
+      if(grp.length<2){
+        // 단일 계정 — 기존과 동일
+        html+='<tr><td><div class="minfo"><div class="mavatar" style="background:'+c+'22;color:'+c+'">'+(m.name?m.name[0]:'?')+'</div><div><div class="mname">'+m.name+statusBadgeHtml(m)+suspectBadgeHtml(m)+'</div><div class="mid">@'+m.username+'</div></div></div></td>'
+        +'<td>'+appBadgeMulti(m)+'</td>'
+        +'<td style="font-size:11px">'+branchPath(m.branch_id,true)+'</td>'
+        +'<td style="font-size:11px">'+(m.phone||'-')+'</td>'
+        +'<td style="font-size:11px;color:var(--text2)">'+isoToFd(m.createdAt)+'</td>'
+        +'<td><span class="badge '+(sb_[m.status]||'bg-gray')+'">'+(sl[m.status]||m.status)+'</span></td>'
+        +'<td><span class="badge '+(m.plan==='free'?'bg-purple':'bg-green')+'">'+(m.plan==='free'?'무료':'유료')+'</span></td>'
+        +'<td>'+(m.status==='approved'?expBadge(m.expire):'-')+'</td>'
+        +'<td><div style="display:flex;gap:4px;flex-wrap:wrap">'
+        +(m.status==='pending'?'<button class="btn btn-s btn-sm" onclick="approveM('+m.id+')">승인</button><button class="btn btn-d btn-sm" onclick="rejectM('+m.id+')">거절</button><button class="btn btn-g btn-sm" onclick="showMember('+m.id+')">상세</button>':'<button class="btn btn-g btn-sm" onclick="showMember('+m.id+')">상세</button>')
+        +(m.status==='approved'?'<button class="btn btn-sm" style="background:'+(m.paused?'#e74c3c':'#3498db')+';color:#fff" onclick="togglePause('+m.id+')" title="'+(m.paused?'정지 해제':'이용기간 정지')+'">'+(m.paused?'⏸ 정지중':'정지')+'</button>':'')
+        +'<button class="btn btn-d btn-sm" onclick="deleteM('+m.id+')">삭제</button>'
+        +'</div></td></tr>';
+      } else {
+        // ★ 토스+그랩 동일인 — 한 줄로 통합, 앱별 정보는 줄 안에서 분리 표시
+        var ic=function(g){return appGroup(g.appType)==='grab'?'🛵':'🚗';};
+        var idLines=grp.map(function(g){return '<div class="mid">'+ic(g)+' @'+g.username+'</div>';}).join('');
+        var cell=function(fn){return grp.map(function(g){return '<div style="margin:1px 0;font-size:11px;white-space:nowrap"><span style="color:var(--text3)">'+ic(g)+'</span> '+fn(g)+'</div>';}).join('');};
+        html+='<tr><td><div class="minfo"><div class="mavatar" style="background:'+c+'22;color:'+c+'">'+(m.name?m.name[0]:'?')+'</div><div><div class="mname">'+m.name+statusBadgeHtml(m)+suspectBadgeHtml(m)+'</div>'+idLines+'</div></div></td>'
+        +'<td>'+appBadgeMulti(m)+'</td>'
+        +'<td style="font-size:11px">'+branchPath(m.branch_id,true)+'</td>'
+        +'<td style="font-size:11px">'+(m.phone||'-')+'</td>'
+        +'<td style="font-size:11px;color:var(--text2)">'+isoToFd(m.createdAt)+'</td>'
+        +'<td>'+cell(function(g){return '<span class="badge '+(sb_[g.status]||'bg-gray')+'">'+(sl[g.status]||g.status)+'</span>';})+'</td>'
+        +'<td>'+cell(function(g){return '<span class="badge '+(g.plan==='free'?'bg-purple':'bg-green')+'">'+(g.plan==='free'?'무료':'유료')+'</span>';})+'</td>'
+        +'<td>'+cell(function(g){return g.status==='approved'?expBadge(g.expire):'-';})+'</td>'
+        +'<td>'+grp.map(function(g){
+            return '<div style="display:flex;gap:4px;align-items:center;margin:2px 0;flex-wrap:wrap"><span style="font-size:10px;color:var(--text3);width:16px">'+ic(g)+'</span>'
+            +(g.status==='pending'?'<button class="btn btn-s btn-sm" onclick="approveM('+g.id+')">승인</button><button class="btn btn-d btn-sm" onclick="rejectM('+g.id+')">거절</button>':'')
+            +'<button class="btn btn-g btn-sm" onclick="showMember('+g.id+')">상세</button>'
+            +(g.status==='approved'?'<button class="btn btn-sm" style="background:'+(g.paused?'#e74c3c':'#3498db')+';color:#fff" onclick="togglePause('+g.id+')" title="'+(g.paused?'정지 해제':'이용기간 정지')+'">'+(g.paused?'⏸':'정지')+'</button>':'')
+            +'<button class="btn btn-d btn-sm" onclick="deleteM('+g.id+')">삭제</button></div>';
+          }).join('')+'</td></tr>';
+      }
     });
     html+='</tbody></table></div>';
   }
@@ -2011,7 +2044,7 @@ function showMember(id){
       var icon=(ag==='grab')?'🛵 그랩':'🚗 토스';
       var dday=(g.status==='approved'&&g.expire)?expBadge(g.expire):'';
       var plan='<span class="badge '+(g.plan==='free'?'bg-purple':'bg-green')+'" style="font-size:9px">'+(g.plan==='free'?'무료':'유료')+'</span>';
-      return '<div'+(isCur?'':' onclick="showMember('+g.id+')"')+' style="flex:1;min-width:130px;cursor:'+(isCur?'default':'pointer')+';background:var(--bg4);border:2px solid '+(isCur?col:'var(--border)')+';border-radius:8px;padding:8px 10px">'
+      return '<div'+(isCur?'':' onclick="showMember('+g.id+')"')+' style="flex:1;min-width:0;cursor:'+(isCur?'default':'pointer')+';background:var(--bg4);border:2px solid '+(isCur?col:'var(--border)')+';border-radius:8px;padding:8px 10px">'
         +'<div style="font-size:12px;font-weight:600;color:'+col+'">'+icon+(isCur?' <span style="font-size:9px;color:var(--text3)">(보는 중)</span>':'')+'</div>'
         +'<div style="font-size:11px;color:var(--text2);margin-top:2px">@'+g.username+'</div>'
         +'<div style="margin-top:4px;display:flex;gap:4px;align-items:center;flex-wrap:wrap">'+plan+dday+'</div>'
@@ -2019,7 +2052,7 @@ function showMember(id){
     }).join('');
     linkedHtml='<div class="alert" style="background:rgba(52,152,219,.10);border:1px solid rgba(52,152,219,.35);margin-bottom:12px">'
       +'<div style="font-weight:600;color:#3498db;margin-bottom:6px;font-size:12px">📱 토스·그랩 둘 다 사용 중인 회원 — 계정별 관리</div>'
-      +'<div style="display:flex;gap:8px;flex-wrap:wrap">'+chips+'</div>'
+      +'<div style="display:flex;gap:8px">'+chips+'</div>'
       +'<div style="font-size:10px;color:var(--text3);margin-top:6px">클릭하면 해당 앱 계정 상세로 전환됩니다. 각 계정은 기간·결제가 따로입니다.</div>'
       +'</div>';
   })();
@@ -2170,19 +2203,47 @@ function renderLicense(){
     html+='<div class="empty"><div class="empty-icon">📋</div><div class="empty-txt">해당 조건의 회원이 없습니다</div></div>';
   } else {
     html+='<div class="tw"><table><thead><tr><th>기사</th><th>앱</th><th>소속</th><th>이용권</th><th>기기</th><th>만료일 설정</th><th>D-day</th><th>관리</th></tr></thead><tbody>';
+    var seenL={};
     list.forEach(function(m){
+      var pk=personKey(m);
+      if(seenL[pk]) return;       // ★ 동일인은 한 줄로 (2026-06-17)
+      seenL[pk]=true;
+      var grp=personGroupIn(m, list);
       var c=ac(m.id);
-      var devCnt=(m.devices||[]).length;
-      html+='<tr><td><div class="minfo"><div class="mavatar" style="background:'+c+'22;color:'+c+'">'+(m.name?m.name[0]:'?')+'</div><div><div class="mname">'+m.name+statusBadgeHtml(m)+suspectBadgeHtml(m)+'</div><div class="mid">@'+m.username+'</div></div></div></td>'
-      +'<td>'+appBadgeMulti(m)+'</td>'
-      +'<td style="font-size:11px">'+branchPath(m.branch_id,true)+'</td>'
-      +'<td><span class="badge '+(m.plan==='free'?'bg-purple':'bg-green')+'">'+(m.plan==='free'?'무료':'유료')+'</span></td>'
-      +'<td><button class="btn btn-b btn-sm" onclick="openDevModal('+m.id+')">📱 '+devCnt+'대 관리</button></td>'
-      +'<td style="min-width:140px"><div class="cal-wrap"><input class="cal-inp" id="exp-'+m.id+'" value="'+(m.expire||'')+'" placeholder="YYYY.MM.DD" maxlength="10" onfocus="openCal('+m.id+')" oninput="handleDateInput('+m.id+',this)" onkeydown="if(event.key===\'Enter\'){event.preventDefault();applyTypedDate('+m.id+',this)}"><div class="cal-dropdown" id="cdd-'+m.id+'"></div></div></td>'
-      +'<td>'+expBadge(m.expire)+'</td>'
-      +'<td><div style="display:flex;gap:4px">'
-      +((role==='dev'||role==='master')?'<button class="btn btn-g btn-sm" onclick="toggleFree('+m.id+')">'+(m.plan==='free'?'무료해제':'무료설정')+'</button>':'')
-      +'<button class="btn btn-b btn-sm" onclick="showMember('+m.id+')">상세</button></div></td></tr>';
+      if(grp.length<2){
+        var devCnt=(m.devices||[]).length;
+        html+='<tr><td><div class="minfo"><div class="mavatar" style="background:'+c+'22;color:'+c+'">'+(m.name?m.name[0]:'?')+'</div><div><div class="mname">'+m.name+statusBadgeHtml(m)+suspectBadgeHtml(m)+'</div><div class="mid">@'+m.username+'</div></div></div></td>'
+        +'<td>'+appBadgeMulti(m)+'</td>'
+        +'<td style="font-size:11px">'+branchPath(m.branch_id,true)+'</td>'
+        +'<td><span class="badge '+(m.plan==='free'?'bg-purple':'bg-green')+'">'+(m.plan==='free'?'무료':'유료')+'</span></td>'
+        +'<td><button class="btn btn-b btn-sm" onclick="openDevModal('+m.id+')">📱 '+devCnt+'대 관리</button></td>'
+        +'<td style="min-width:140px"><div class="cal-wrap"><input class="cal-inp" id="exp-'+m.id+'" value="'+(m.expire||'')+'" placeholder="YYYY.MM.DD" maxlength="10" onfocus="openCal('+m.id+')" oninput="handleDateInput('+m.id+',this)" onkeydown="if(event.key===\'Enter\'){event.preventDefault();applyTypedDate('+m.id+',this)}"><div class="cal-dropdown" id="cdd-'+m.id+'"></div></div></td>'
+        +'<td>'+expBadge(m.expire)+'</td>'
+        +'<td><div style="display:flex;gap:4px">'
+        +((role==='dev'||role==='master')?'<button class="btn btn-g btn-sm" onclick="toggleFree('+m.id+')">'+(m.plan==='free'?'무료해제':'무료설정')+'</button>':'')
+        +'<button class="btn btn-b btn-sm" onclick="showMember('+m.id+')">상세</button></div></td></tr>';
+      } else {
+        // ★ 토스+그랩 동일인 — 한 줄 통합. 만료일/이용권/기기/D-day/관리는 앱별로 따로.
+        //   날짜칸이 계정 id별(exp-{id})이라 토스 칸=토스만, 그랩 칸=그랩만 연장됨.
+        var ic=function(g){return appGroup(g.appType)==='grab'?'🛵':'🚗';};
+        var idLines=grp.map(function(g){return '<div class="mid">'+ic(g)+' @'+g.username+'</div>';}).join('');
+        var cellL=function(fn){return grp.map(function(g){return '<div style="margin:2px 0;font-size:11px;white-space:nowrap"><span style="color:var(--text3)">'+ic(g)+'</span> '+fn(g)+'</div>';}).join('');};
+        html+='<tr><td><div class="minfo"><div class="mavatar" style="background:'+c+'22;color:'+c+'">'+(m.name?m.name[0]:'?')+'</div><div><div class="mname">'+m.name+statusBadgeHtml(m)+suspectBadgeHtml(m)+'</div>'+idLines+'</div></div></td>'
+        +'<td>'+appBadgeMulti(m)+'</td>'
+        +'<td style="font-size:11px">'+branchPath(m.branch_id,true)+'</td>'
+        +'<td>'+cellL(function(g){return '<span class="badge '+(g.plan==='free'?'bg-purple':'bg-green')+'">'+(g.plan==='free'?'무료':'유료')+'</span>';})+'</td>'
+        +'<td>'+grp.map(function(g){var dc=(g.devices||[]).length;return '<div style="margin:2px 0"><button class="btn btn-b btn-sm" onclick="openDevModal('+g.id+')">'+ic(g)+' 📱 '+dc+'대</button></div>';}).join('')+'</td>'
+        +'<td style="min-width:150px">'+grp.map(function(g){
+            return '<div style="margin:3px 0"><div style="font-size:10px;color:var(--text3);margin-bottom:1px">'+ic(g)+' '+(appGroup(g.appType)==='grab'?'그랩':'토스')+'</div>'
+            +'<div class="cal-wrap"><input class="cal-inp" id="exp-'+g.id+'" value="'+(g.expire||'')+'" placeholder="YYYY.MM.DD" maxlength="10" onfocus="openCal('+g.id+')" oninput="handleDateInput('+g.id+',this)" onkeydown="if(event.key===\'Enter\'){event.preventDefault();applyTypedDate('+g.id+',this)}"><div class="cal-dropdown" id="cdd-'+g.id+'"></div></div></div>';
+          }).join('')+'</td>'
+        +'<td>'+cellL(function(g){return expBadge(g.expire);})+'</td>'
+        +'<td>'+grp.map(function(g){
+            return '<div style="display:flex;gap:4px;align-items:center;margin:2px 0"><span style="font-size:10px;color:var(--text3);width:16px">'+ic(g)+'</span>'
+            +((role==='dev'||role==='master')?'<button class="btn btn-g btn-sm" onclick="toggleFree('+g.id+')">'+(g.plan==='free'?'무료해제':'무료설정')+'</button>':'')
+            +'<button class="btn btn-b btn-sm" onclick="showMember('+g.id+')">상세</button></div>';
+          }).join('')+'</td></tr>';
+      }
     });
     html+='</tbody></table></div>';
   }
