@@ -792,7 +792,8 @@ function isoToFdKST(iso){
   var kst=new Date(d.getTime()+9*60*60*1000);
   return kst.getUTCFullYear()+'.'+(kst.getUTCMonth()+1).toString().padStart(2,'0')+'.'+kst.getUTCDate().toString().padStart(2,'0');
 }
-function isoToFd(iso){return isoToFdKST(iso);}  // ★ 기존 isoToFd도 KST로 통일function dl(s){var d=pd(s);if(!d)return null;return Math.ceil((d-today)/86400000);}
+function isoToFd(iso){return isoToFdKST(iso);}  // ★ 기존 isoToFd도 KST로 통일
+function dl(s){var d=pd(s);if(!d)return null;return Math.ceil((d-today)/86400000);}
 function expBadge(s){var n=dl(s);if(n===null)return '';if(n<0)return '<span class="badge bg-red">만료됨</span>';if(n<=3)return '<span class="badge bg-red">D-'+n+'</span>';if(n<=7)return '<span class="badge bg-yellow">D-'+n+'</span>';return '<span class="badge bg-green">D-'+n+'</span>';}
 
 function statusBadge(app){
@@ -1736,6 +1737,16 @@ function renderMembers(){
     +(role==='dev'?'<button class="btn btn-g" onclick="exportMemberExcel()" style="background:rgba(39,174,96,.15);color:#27ae60;border:1px solid rgba(39,174,96,.3)">📊 회원 엑셀</button>':'')
     +'<button class="btn btn-g" onclick="loadAllData().then(()=>{navigate(\'members\');showToast(\'새로고침 완료\',\'success\');})">🔄 새로고침</button>'
     +'</div></div>';
+
+  // ★ 만료 회원 통계 카드
+  html+='<div class="sgrid sg4" style="margin-bottom:12px">'
+    +'<div class="scard" style="cursor:pointer;'+(memberShowExpired?'':'border-top:2px solid var(--blue)')+';" onclick="memberShowExpired=false;navigate(\'members\')"><div class="scard-top"><div class="slabel">✅ 활성 회원</div><div class="sicon" style="background:rgba(41,128,185,.12);color:var(--blue)">👥</div></div><div class="sval" style="color:'+(memberShowExpired?'var(--text2)':'var(--blue)')+'">'+activeCount+'</div></div>'
+    +'<div class="scard" style="cursor:pointer;'+(memberShowExpired?'border-top:2px solid var(--red);background:rgba(231,76,60,.05)':'')+'" onclick="memberShowExpired=true;navigate(\'members\')"><div class="scard-top"><div class="slabel">❌ 만료 회원'+(memberShowExpired?' ✓':' (클릭)')+'</div><div class="sicon" style="background:rgba(231,76,60,.12);color:var(--red)">📅</div></div><div class="sval" style="color:'+(expiredCount>0?'var(--red)':'var(--text2)')+'">'+expiredCount+'</div></div>'
+    +'</div>';
+  if(memberShowExpired){
+    html+='<div class="alert a-red" style="margin-bottom:12px">❌ <strong>만료된 회원 목록</strong> 표시 중 &nbsp;|&nbsp; <a href="#" onclick="memberShowExpired=false;navigate(\'members\');return false" style="color:inherit;font-weight:700">활성 회원 보기</a></div>';
+  }
+
   
   // 검색 + 날짜 필터 바
   html+='<div class="card" style="padding:14px;margin-bottom:12px"><div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end">'
@@ -5210,13 +5221,3 @@ window.addEventListener('load', async () => {
 
 </body>
 </html>
-
-
-  // ★ 만료 회원 통계 카드
-  html+='<div class="sgrid sg4" style="margin-bottom:12px">'
-    +'<div class="scard" style="cursor:pointer;'+(memberShowExpired?'':'border-top:2px solid var(--blue)')+';" onclick="memberShowExpired=false;navigate(\'members\')"><div class="scard-top"><div class="slabel">✅ 활성 회원</div><div class="sicon" style="background:rgba(41,128,185,.12);color:var(--blue)">👥</div></div><div class="sval" style="color:'+(memberShowExpired?'var(--text2)':'var(--blue)')+'">'+activeCount+'</div></div>'
-    +'<div class="scard" style="cursor:pointer;'+(memberShowExpired?'border-top:2px solid var(--red);background:rgba(231,76,60,.05)':'')+'" onclick="memberShowExpired=true;navigate(\'members\')"><div class="scard-top"><div class="slabel">❌ 만료 회원'+(memberShowExpired?' ✓':' (클릭)')+'</div><div class="sicon" style="background:rgba(231,76,60,.12);color:var(--red)">📅</div></div><div class="sval" style="color:'+(expiredCount>0?'var(--red)':'var(--text2)')+'">'+expiredCount+'</div></div>'
-    +'</div>';
-  if(memberShowExpired){
-    html+='<div class="alert a-red" style="margin-bottom:12px">❌ <strong>만료된 회원 목록</strong> 표시 중 &nbsp;|&nbsp; <a href="#" onclick="memberShowExpired=false;navigate(\'members\');return false" style="color:inherit;font-weight:700">활성 회원 보기</a></div>';
-  }
