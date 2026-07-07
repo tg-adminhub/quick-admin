@@ -544,6 +544,35 @@ tr:last-child td{border-bottom:none}tr:hover td{background:rgba(255,255,255,.015
   </div>
 </div>
 
+<!-- ★ 결제 승인 모달 (수기 금액 입력) -->
+<div class="modal-bg" id="modal-pay-approve">
+  <div class="modal" style="max-width:400px">
+    <div class="mh"><div class="mt">💳 결제 승인</div><button class="mc" onclick="closeModal('modal-pay-approve')">×</button></div>
+    <div class="mb">
+      <div id="pay-approve-info" style="background:var(--bg3);border-radius:8px;padding:12px;margin-bottom:14px;font-size:13px;line-height:1.7"></div>
+      <div class="fg">
+        <label class="fl">승인 금액 <span style="color:var(--text3);font-size:11px">(수정 가능)</span></label>
+        <div style="display:flex;gap:8px;align-items:center">
+          <span style="color:var(--text2);font-size:15px;font-weight:600">₩</span>
+          <input class="fi2" id="pay-approve-amount" type="number" min="0" step="1000" style="flex:1;font-size:15px;font-weight:600" placeholder="60000">
+        </div>
+        <div style="display:flex;gap:6px;margin-top:8px;flex-wrap:wrap">
+          <button class="btn btn-g btn-sm" onclick="setPayApproveAmt(30000)">3만</button>
+          <button class="btn btn-g btn-sm" onclick="setPayApproveAmt(50000)">5만</button>
+          <button class="btn btn-g btn-sm" onclick="setPayApproveAmt(60000)">6만</button>
+          <button class="btn btn-g btn-sm" onclick="setPayApproveAmt(80000)">8만</button>
+          <button class="btn btn-g btn-sm" onclick="setPayApproveAmt(100000)">10만</button>
+          <button class="btn btn-g btn-sm" onclick="setPayApproveAmt(120000)">12만</button>
+        </div>
+      </div>
+    </div>
+    <div style="display:flex;gap:8px;padding:0 16px 16px">
+      <button class="btn btn-g" style="flex:1" onclick="closeModal('modal-pay-approve')">취소</button>
+      <button class="btn btn-s" style="flex:2" onclick="doApproveWithAmount()">✓ 이 금액으로 승인</button>
+    </div>
+  </div>
+</div>
+
 <!-- TOAST -->
 <div id="toast" class="toast"></div>
 <div class="mob-overlay" id="mob-overlay" onclick="toggleMobMenu()"></div>
@@ -2994,7 +3023,7 @@ async function bulkApproveP(){
   var ok=0,fail=0;
   for(var i=0;i<ids.length;i++){
     try{
-      await approveP(ids[i], true);
+      await doApproveP(ids[i], null, true);
       ok++;
     }catch(e){fail++;}
   }
@@ -3557,23 +3586,76 @@ function setPF(f){
   navigate('payment');
 }
 
-async function approveP(id, skipConfirm, isNewApproval){
+// ★ 결제 승인 모달
+var _payApproveId = null;
+var _payApproveIsNew = false;
+
+function approveP(id, skipConfirm, isNewApproval){
+  var p = payments.find(x=>x.id===id);
+  if(!p) return;
+
+  // 보안: 본인 결제 승인 금지
+  if(role!=='dev' && curAcc && p.username===curAcc.username){
+    showToast('본인 명의 결제는 다른 어드민이 승인해야 합니다','error'); return;
+  }
+
+  // 기기추가 건은 기존 confirm 방식 유지
+  var isDevAdd = (p.note||'').indexOf('[기기추가]|')===0;
+  if(isDevAdd){
+    doApproveP(id, p.amount, skipConfirm, isNewApproval);
+    return;
+  }
+
+  // ★ 수기 금액 입력 모달
+  _payApproveId = id;
+  _payApproveIsNew = !!isNewApproval;
+
+  var pm = members.find(x=>x.id===p.userId);
+  var infoHtml = '<div style="font-size:12px;color:var(--text3);margin-bottom:4px">회원 정보</div>'
+    + '<div style="font-weight:600">'+p.name+' <span style="font-weight:400;color:var(--text3)">@'+p.username+'</span></div>'
+    + (p.note ? '<div style="margin-top:4px">입금자명: <strong>'+p.note+'</strong></div>' : '')
+    + '<div style="margin-top:4px">신청 금액: <strong style="color:var(--green)">₩'+(p.amount||0).toLocaleString()+'</strong></div>'
+    + '<div style="margin-top:4px;font-size:11px;color:var(--text3)">승인 후 '+(isNewApproval?'신규 잔여기간 + 50일':'40일')+' 연장됩니다</div>';
+
+  document.getElementById('pay-approve-info').innerHTML = infoHtml;
+  document.getElementById('pay-approve-amount').value = p.amount || 60000;
+  document.getElementById('modal-pay-approve').classList.add('open');
+}
+
+function setPayApproveAmt(amt){
+  document.getElementById('pay-approve-amount').value = amt;
+}
+
+async function doApproveWithAmount(){
+  if(!_payApproveId) return;
+  var amt = parseInt(document.getElementById('pay-approve-amount').value) || 0;
+  if(amt <= 0){
+    showToast('금액을 입력해주세요','error'); return;
+  }
+  closeModal('modal-pay-approve');
+  await doApproveP(_payApproveId, amt, true, _payApproveIsNew);
+  _payApproveId = null;
+}
+
+async function doApproveP(id, overrideAmount, skipConfirm, isNewApproval){
   var p=payments.find(x=>x.id===id);if(!p)return;
-  
-  // ★ 보안: 본인이 본인 결제 승인 금지 (dev 만 가능)
+
+  // 보안: 본인 결제 승인 금지
   if(role!=='dev' && curAcc && p.username===curAcc.username){
     showToast('본인 명의 결제는 다른 어드민이 승인해야 합니다','error');throw new Error('self-approve blocked');
   }
-  
-  // ★ 기기추가 대기 건 판별 (2026-06-11): note 가 "[기기추가]|label|phone|..." 형식
+
   var isDevAdd = (p.note||'').indexOf('[기기추가]|')===0;
   var devAddLabel='', devAddPhone='';
   if(isDevAdd){
     var parts=(p.note||'').split('|');
     devAddLabel=parts[1]||''; devAddPhone=parts[2]||'';
   }
+
+  var useAmount = (overrideAmount !== undefined && overrideAmount !== null) ? overrideAmount : (p.amount||0);
+
   if(!skipConfirm){
-    var msg='₩'+(p.amount||0).toLocaleString()+(isDevAdd?' 기기추가':' 결제')+'를 승인하시겠습니까?';
+    var msg='₩'+useAmount.toLocaleString()+(isDevAdd?' 기기추가':' 결제')+'를 승인하시겠습니까?';
     if(isDevAdd){
       msg+='\n기기: '+devAddLabel+(devAddPhone?' ('+devAddPhone+')':'');
       msg+='\n\n승인 시 이 기기가 실제로 추가됩니다. (이용권 연장 없음)';
@@ -3585,32 +3667,26 @@ async function approveP(id, skipConfirm, isNewApproval){
   }
   try{
     const approvedAt = new Date();
-    // ★ 처리자 기록 (감사 로그)
     const fullPayload={
       status:'approved',
-      approved_amount:p.amount,
+      approved_amount: useAmount,
       processed_at:approvedAt.toISOString(),
       processed_by_admin_id:curAcc?curAcc.id:null,
       processed_by_name:curAcc?(curAcc.name+' (@'+curAcc.username+')'):'unknown'
     };
     var {error:pe}=await sb.from('payment_requests').update(fullPayload).eq('id',id);
-    // ★ DB 컬럼 미존재 시 fallback — 처리자 컬럼 빼고 재시도
     if(pe && /processed_by_admin_id|processed_by_name|schema cache/i.test(pe.message||'')){
-      console.warn('[approveP] 처리자 컬럼 없음 → fallback (감사 로그 미적용)');
+      console.warn('[approveP] 처리자 컬럼 없음 → fallback');
       const minimalPayload={
         status:'approved',
-        approved_amount:p.amount,
+        approved_amount: useAmount,
         processed_at:approvedAt.toISOString()
       };
       var retry=await sb.from('payment_requests').update(minimalPayload).eq('id',id);
       pe=retry.error;
-      if(!pe && !skipConfirm){
-        showToast('승인 완료 (단 처리자 기록 미적용 — Supabase 에 컬럼 추가 필요)','warning');
-      }
     }
     if(pe)throw pe;
-    
-    // ★ 기기추가 승인이면: 실제 기기 생성 + 이용권 연장은 건너뜀 (2026-06-11)
+
     if(isDevAdd){
       const {error:de}=await sb.from('user_devices').insert({
         user_id:p.userId,
@@ -3664,7 +3740,7 @@ async function approveP(id, skipConfirm, isNewApproval){
       }
       var notifyMsg='✅ 결제 승인 완료\n\n'
         +'회원: '+(p.name||'-')+' (@'+(p.username||'-')+')\n'
-        +'금액: ₩'+(p.amount||0).toLocaleString()+'\n'
+        +'금액: ₩'+useAmount.toLocaleString()+''+(useAmount!==(p.amount||0)?' (신청: ₩'+(p.amount||0).toLocaleString()+')':'')+'\n'
         +(p.note?'입금자명: '+p.note+'\n':'')
         +'처리자: '+(curAcc?curAcc.name+' (@'+curAcc.username+')':'-')
         +expStr+'\n'
