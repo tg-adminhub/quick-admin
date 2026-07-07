@@ -1075,6 +1075,7 @@ async function loadAllData(){
       platform:p.users?(p.users.app_type||'next'):'next',
       appType:p.users?(p.users.app_type||'next'):'next',
       amount:p.amount,
+      approvedAmt: p.approved_amount || p.amount,  // ★ 실제 승인 금액 (수기 변경 반영)
       date:isoToFd(p.created_at),
       createdAt:p.created_at,  // ★ 날짜 필터용 ISO
       processedAt:p.processed_at,
@@ -2310,6 +2311,8 @@ function renderLicense(){
         +'<td>'+expBadge(m.expire)+'</td>'
         +'<td><div style="display:flex;gap:4px">'
         +((role==='dev'||role==='master')?'<button class="btn btn-g btn-sm" onclick="toggleFree('+m.id+')">'+(m.plan==='free'?'무료해제':'무료설정')+'</button>':'')
+        +'<button class="btn btn-sm" style="background:rgba(52,152,219,.15);color:#3498db;border:1px solid rgba(52,152,219,.3)" onclick="adminExtendLicense('+m.id+',50,true)">🆕신규</button>'
+        +'<button class="btn btn-sm" style="background:rgba(39,174,96,.15);color:#27ae60;border:1px solid rgba(39,174,96,.3)" onclick="adminExtendLicense('+m.id+',40,false)">🔄연장</button>'
         +'<button class="btn btn-b btn-sm" onclick="showMember('+m.id+')">상세</button></div></td></tr>';
       } else {
         // ★ 토스+그랩 동일인 — 한 줄 통합. 만료일/이용권/기기/D-day/관리는 앱별로 따로.
@@ -2330,6 +2333,8 @@ function renderLicense(){
         +'<td>'+grp.map(function(g){
             return '<div style="display:flex;gap:4px;align-items:center;margin:2px 0"><span style="font-size:10px;color:var(--text3);width:16px">'+ic(g)+'</span>'
             +((role==='dev'||role==='master')?'<button class="btn btn-g btn-sm" onclick="toggleFree('+g.id+')">'+(g.plan==='free'?'무료해제':'무료설정')+'</button>':'')
+            +'<button class="btn btn-sm" style="background:rgba(52,152,219,.15);color:#3498db;border:1px solid rgba(52,152,219,.3)" onclick="adminExtendLicense('+g.id+',50,true)">🆕신규</button>'
+            +'<button class="btn btn-sm" style="background:rgba(39,174,96,.15);color:#27ae60;border:1px solid rgba(39,174,96,.3)" onclick="adminExtendLicense('+g.id+',40,false)">🔄연장</button>'
             +'<button class="btn btn-b btn-sm" onclick="showMember('+g.id+')">상세</button></div>';
           }).join('')+'</td></tr>';
       }
@@ -2338,6 +2343,65 @@ function renderLicense(){
   }
   html+='</div>';
   return html;
+}
+
+// ★ 이용권 관리에서 직접 신규/연장 처리 (₩60,000 결제 기록 자동 생성)
+async function adminExtendLicense(userId, days, isNew){
+  var m = members.find(x=>x.id===userId);
+  if(!m) return;
+  var label = isNew ? '[신규] '+days+'일 연장' : '[연장] '+days+'일';
+  var msg = '회원: '+(m.realName||m.username)
+    +'\n처리: '+label+' (₩60,000 매출 산정)'
+    +'\n\n진행하시겠습니까?';
+  if(!confirm(msg)) return;
+
+  try {
+    // 1) 이용권 연장
+    var base = new Date();
+    if(m.licenseExpiresAt){
+      var existing = new Date(m.licenseExpiresAt);
+      if(existing.getTime() > base.getTime()) base = existing;
+    }
+    var newExpire = new Date(base.getTime());
+    newExpire.setDate(newExpire.getDate() + days);
+
+    var userPayload = { license_expires_at: newExpire.toISOString(), is_free_user: false };
+    if(isNew) userPayload.is_new = false;
+    var {error:ue} = await sb.from('users').update(userPayload).eq('id', userId);
+    if(ue) throw ue;
+
+    // 2) 결제 기록 생성 (매출 산정용 — 상태 approved, 금액 60,000)
+    var today = new Date();
+    var dateStr = today.getFullYear()+'.'
+      +String(today.getMonth()+1).padStart(2,'0')+'.'
+      +String(today.getDate()).padStart(2,'0');
+    var payPayload = {
+      user_id: userId,
+      username: m.username,
+      amount: 60000,
+      approved_amount: 60000,
+      status: 'approved',
+      note: (isNew?'[신규]':'[연장]')+' 어드민 직접처리 ('+days+'일)',
+      date: dateStr,
+      processed_at: today.toISOString(),
+      processed_by_name: curAcc ? (curAcc.name+' (@'+curAcc.username+')') : 'admin',
+      branch_id: m.branch_id,
+      app_type: m.appType
+    };
+    var {error:pe} = await sb.from('payment_requests').insert(payPayload);
+    if(pe) console.warn('[adminExtendLicense] 결제기록 생성 실패 (이용권은 연장됨):', pe.message);
+
+    // 3) 로컬 캐시 갱신
+    m.licenseExpiresAt = newExpire.toISOString();
+    m.expire = isoToFdKST(newExpire.toISOString());
+    if(isNew) m.isNew = false;
+
+    showToast('✅ '+label+' 완료 · 만료일: '+m.expire, 'success');
+    await loadAllData();
+    navigate('license');
+  } catch(e) {
+    showToast('처리 실패: '+e.message, 'error');
+  }
 }
 
 async function toggleFree(id){
@@ -2833,8 +2897,8 @@ function renderPayment(){
     if(p.status!=='approved')return false;
     var d=pd(p.date);
     return d&&d>=monthAgo;
-  }).reduce((sum,p)=>sum+(p.amount||0),0);
-  var totalRev=visPayments.filter(p=>p.status==='approved').reduce((sum,p)=>sum+(p.amount||0),0);
+  }).reduce((sum,p)=>sum+(p.approvedAmt||p.amount||0),0);
+  var totalRev=visPayments.filter(p=>p.status==='approved').reduce((sum,p)=>sum+(p.approvedAmt||p.amount||0),0);
 
   // ★ 날짜 필터 기간 매출 (설정된 경우)
   var filterRev=null, filterRevLabel='';
@@ -2850,7 +2914,7 @@ function renderPayment(){
       if(fFrom&&d<fFrom)return false;
       if(fTo&&d>fTo)return false;
       return true;
-    }).reduce((sum,p)=>sum+(p.amount||0),0);
+    }).reduce((sum,p)=>sum+(p.approvedAmt||p.amount||0),0);
     filterRevLabel=(payDateFrom||'시작')+'~'+(payDateTo||'종료');
   }
 
@@ -2959,7 +3023,7 @@ function renderPayment(){
       +'<td><div class="minfo"><div class="mavatar" style="background:'+c+'22;color:'+c+'">'+(p.name?p.name[0]:'?')+'</div><div><div class="mname">'+p.name+'</div><div class="mid">@'+p.username+'</div></div></div></td>'
       +'<td>'+appBadge(p.appType)+'</td>'
       +'<td style="font-size:11px">'+branchPath(p.branch_id,true)+'</td>'
-      +'<td style="font-weight:700;color:'+(p.status==='approved'?'var(--green)':'var(--text2)')+'">₩'+(p.amount||0).toLocaleString()+'</td>'
+      +'<td style="font-weight:700;color:'+(p.status==='approved'?'var(--green)':'var(--text2)')+'">₩'+(p.status==='approved'?(p.approvedAmt||p.amount||0):(p.amount||0)).toLocaleString()+(p.status==='approved'&&p.approvedAmt&&p.approvedAmt!==(p.amount||0)?'<span style="font-size:10px;color:var(--text3);font-weight:400"> (신청:₩'+(p.amount||0).toLocaleString()+')</span>':'')+'</td>'
       +'<td>'+depositHtml+'</td>'
       +'<td style="font-size:11px;color:var(--text2)">'+p.date+'</td>'
       +'<td>'+procHtml+'</td>'
@@ -3220,7 +3284,7 @@ function exportPaymentExcel(){
     '전화':p.phone||'-',
     '앱':p.appType==='grab'?'그랩':'토스',
     '소속지점':branchPath(p.branch_id,false).replace(/<[^>]+>/g,'').replace(/\s+/g,' ').trim(),
-    '금액':p.amount||0,
+    '금액':(p.approvedAmt||p.amount||0),
     '입금자명':displayNote(p.note),
     '본인名일치':((p.note||'').indexOf('[기기추가]|')!==0 && p.note&&p.name&&p.note.replace(/\s/g,'')===p.name.replace(/\s/g,''))?'O':((p.note&&(p.note||'').indexOf('[기기추가]|')!==0)?'X':'-'),
     '신청일':p.date||'-',
@@ -3356,7 +3420,7 @@ function exportRevenueExcel(){
       '총판':h.master,
       '지사':h.branch,
       '지점':h.sub,
-      '금액':p.amount||0,
+      '금액':(p.approvedAmt||p.amount||0),
       '입금자명':displayNote(p.note),
       '본인名일치':((p.note||'').indexOf('[기기추가]|')!==0 && p.note&&p.name&&p.note.replace(/\s/g,'')===p.name.replace(/\s/g,''))?'O':((p.note&&(p.note||'').indexOf('[기기추가]|')!==0)?'X':'-'),
       '상태':p.status==='approved'?'승인':p.status==='rejected'?'거절':'대기',
@@ -3379,9 +3443,9 @@ function exportRevenueExcel(){
     var key=h.master;
     if(!byMaster[key])byMaster[key]={'총판':key,'건수':0,'합계':0,'토스':0,'그랩':0,'거절수':0,'대기수':0};
     byMaster[key]['건수']++;
-    byMaster[key]['합계']+=(p.amount||0);
-    if(p.appType==='grab')byMaster[key]['그랩']+=(p.amount||0);
-    else byMaster[key]['토스']+=(p.amount||0);
+    byMaster[key]['합계']+=(p.approvedAmt||p.amount||0);
+    if(p.appType==='grab')byMaster[key]['그랩']+=(p.approvedAmt||p.amount||0);
+    else byMaster[key]['토스']+=(p.approvedAmt||p.amount||0);
   });
   // 거절/대기 카운트도 더하기
   rejectedInRange.forEach(p=>{
@@ -3417,9 +3481,9 @@ function exportRevenueExcel(){
     var key=h.master+' > '+h.branch;
     if(!byBranch[key])byBranch[key]={'총판':h.master,'지사':h.branch,'건수':0,'합계':0,'토스':0,'그랩':0};
     byBranch[key]['건수']++;
-    byBranch[key]['합계']+=(p.amount||0);
-    if(p.appType==='grab')byBranch[key]['그랩']+=(p.amount||0);
-    else byBranch[key]['토스']+=(p.amount||0);
+    byBranch[key]['합계']+=(p.approvedAmt||p.amount||0);
+    if(p.appType==='grab')byBranch[key]['그랩']+=(p.approvedAmt||p.amount||0);
+    else byBranch[key]['토스']+=(p.approvedAmt||p.amount||0);
   });
   var branchRows=Object.values(byBranch).sort((a,b)=>b['합계']-a['합계']);
   branchRows.push({
@@ -3438,9 +3502,9 @@ function exportRevenueExcel(){
     var key=h.master+' > '+h.branch+' > '+h.sub;
     if(!bySub[key])bySub[key]={'총판':h.master,'지사':h.branch,'지점':h.sub,'건수':0,'합계':0,'토스':0,'그랩':0};
     bySub[key]['건수']++;
-    bySub[key]['합계']+=(p.amount||0);
-    if(p.appType==='grab')bySub[key]['그랩']+=(p.amount||0);
-    else bySub[key]['토스']+=(p.amount||0);
+    bySub[key]['합계']+=(p.approvedAmt||p.amount||0);
+    if(p.appType==='grab')bySub[key]['그랩']+=(p.approvedAmt||p.amount||0);
+    else bySub[key]['토스']+=(p.approvedAmt||p.amount||0);
   });
   var subRows=Object.values(bySub).sort((a,b)=>b['합계']-a['합계']);
   subRows.push({
@@ -3459,9 +3523,9 @@ function exportRevenueExcel(){
     var d=dStr?dStr.substring(0,10):'-';
     if(!byDate[d])byDate[d]={'날짜':d,'요일':'-','건수':0,'합계':0,'토스':0,'그랩':0};
     byDate[d]['건수']++;
-    byDate[d]['합계']+=(p.amount||0);
-    if(p.appType==='grab')byDate[d]['그랩']+=(p.amount||0);
-    else byDate[d]['토스']+=(p.amount||0);
+    byDate[d]['합계']+=(p.approvedAmt||p.amount||0);
+    if(p.appType==='grab')byDate[d]['그랩']+=(p.approvedAmt||p.amount||0);
+    else byDate[d]['토스']+=(p.approvedAmt||p.amount||0);
   });
   // 요일 채우기
   Object.keys(byDate).forEach(k=>{
