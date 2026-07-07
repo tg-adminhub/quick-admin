@@ -1750,7 +1750,7 @@ function renderMembers(){
   
   // 검색 + 날짜 필터 바
   html+='<div class="card" style="padding:14px;margin-bottom:12px"><div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end">'
-    +'<div style="flex:1;min-width:200px"><label class="fl">🔍 회원 이름/아이디/전화 검색</label><div style="display:flex;gap:6px"><input class="fi2" id="member-search" value="'+(memberSearch||'').replace(/"/g,'&quot;')+'" placeholder="이름, 아이디, 전화번호..." style="flex:1" oninput="memberSearch=this.value;clearTimeout(window.__msTimer);window.__msTimer=setTimeout(()=>navigate(\'members\'),400)" onkeydown="if(event.key===\'Enter\'){clearTimeout(window.__msTimer);navigate(\'members\')}" ><button class="btn btn-g btn-sm" style="white-space:nowrap" onclick="clearTimeout(window.__msTimer);navigate(\'members\')">검색</button></div></div>'
+    +'<div style="flex:1;min-width:200px"><label class="fl">🔍 회원 이름/아이디/전화 검색</label><div style="display:flex;gap:6px"><input class="fi2" id="member-search" value="'+(memberSearch||'').replace(/"/g,'&quot;')+'" placeholder="이름, 아이디, 전화번호..." style="flex:1" oninput="memberSearch=this.value" onkeydown="if(event.key===\'Enter\'){clearTimeout(window.__msTimer);navigate(\'members\')}" ><button class="btn btn-g btn-sm" style="white-space:nowrap" onclick="clearTimeout(window.__msTimer);navigate(\'members\')">검색</button></div></div>'
     +'<div><label class="fl">📅 가입일 시작</label><input class="fi2" type="date" id="member-from" value="'+(memberDateFrom?fdToIsoDate(memberDateFrom):'')+'" onchange="memberDateFrom=this.value?new Date(this.value):null;navigate(\'members\')" style="width:160px"></div>'
     +'<div><label class="fl">~ 종료</label><input class="fi2" type="date" id="member-to" value="'+(memberDateTo?fdToIsoDate(memberDateTo):'')+'" onchange="memberDateTo=this.value?new Date(this.value):null;navigate(\'members\')" style="width:160px"></div>'
     +'<div style="min-width:200px"><label class="fl">🏢 소속별 보기</label>'+buildBranchFilterSelect('member-branch-filter', memberBranchFilter, "memberBranchFilter=this.value;navigate('members')")+'</div>'
@@ -2248,7 +2248,7 @@ function renderLicense(){
   
   // 검색 + 날짜 필터 바
   html+='<div class="card" style="padding:14px;margin-bottom:12px"><div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end">'
-    +'<div style="flex:1;min-width:200px"><label class="fl">🔍 회원 이름/아이디/전화 검색</label><div style="display:flex;gap:6px"><input class="fi2" id="lic-search" value="'+(licenseSearch||'').replace(/"/g,'&quot;')+'" placeholder="이름, 아이디, 전화..." style="flex:1" oninput="licenseSearch=this.value;clearTimeout(window.__lsTimer);window.__lsTimer=setTimeout(()=>navigate(\'license\'),400)" onkeydown="if(event.key===\'Enter\'){clearTimeout(window.__lsTimer);navigate(\'license\')}" ><button class="btn btn-g btn-sm" style="white-space:nowrap" onclick="clearTimeout(window.__lsTimer);navigate(\'license\')">검색</button></div></div>'
+    +'<div style="flex:1;min-width:200px"><label class="fl">🔍 회원 이름/아이디/전화 검색</label><div style="display:flex;gap:6px"><input class="fi2" id="lic-search" value="'+(licenseSearch||'').replace(/"/g,'&quot;')+'" placeholder="이름, 아이디, 전화..." style="flex:1" oninput="licenseSearch=this.value" onkeydown="if(event.key===\'Enter\'){clearTimeout(window.__lsTimer);navigate(\'license\')}" ><button class="btn btn-g btn-sm" style="white-space:nowrap" onclick="clearTimeout(window.__lsTimer);navigate(\'license\')">검색</button></div></div>'
     +'<div><label class="fl">📅 만료일 시작</label><input class="fi2" type="date" id="lic-from" value="'+(licenseDateFrom?fdToIsoDate(licenseDateFrom):'')+'" onchange="licenseDateFrom=this.value?new Date(this.value):null;navigate(\'license\')" style="width:160px"></div>'
     +'<div><label class="fl">~ 종료</label><input class="fi2" type="date" id="lic-to" value="'+(licenseDateTo?fdToIsoDate(licenseDateTo):'')+'" onchange="licenseDateTo=this.value?new Date(this.value):null;navigate(\'license\')" style="width:160px"></div>'
     +'<div style="min-width:200px"><label class="fl">🏢 소속별 보기</label>'+buildBranchFilterSelect('lic-branch-filter', licenseBranchFilter, "licenseBranchFilter=this.value;navigate('license')")+'</div>'
@@ -2806,7 +2806,25 @@ function renderPayment(){
     return d&&d>=monthAgo;
   }).reduce((sum,p)=>sum+(p.amount||0),0);
   var totalRev=visPayments.filter(p=>p.status==='approved').reduce((sum,p)=>sum+(p.amount||0),0);
-  
+
+  // ★ 날짜 필터 기간 매출 (설정된 경우)
+  var filterRev=null, filterRevLabel='';
+  if(payDateFrom||payDateTo){
+    var fFrom=payDateFrom?new Date(payDateFrom):null;
+    var fTo=payDateTo?new Date(payDateTo):null;
+    if(fFrom)fFrom.setHours(0,0,0,0);
+    if(fTo)fTo.setHours(23,59,59,999);
+    filterRev=visPayments.filter(p=>{
+      if(p.status!=='approved')return false;
+      var d=p.createdAt?new Date(p.createdAt):pd(p.date);
+      if(!d)return false;
+      if(fFrom&&d<fFrom)return false;
+      if(fTo&&d>fTo)return false;
+      return true;
+    }).reduce((sum,p)=>sum+(p.amount||0),0);
+    filterRevLabel=(payDateFrom||'시작')+'~'+(payDateTo||'종료');
+  }
+
   // 일별 매출 (최근 30일)
   var dayRev={};
   for(var i=0;i<30;i++){
@@ -2819,26 +2837,27 @@ function renderPayment(){
     var key=d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
     if(dayRev.hasOwnProperty(key))dayRev[key]+=(p.amount||0);
   });
-  
+
   var html='<div class="ph"><div><h1>결제 관리</h1><p>실시간 동기화 — 총 '+visPayments.length+'건 (필터 적용: '+list.length+'건)</p></div>'
     +'<div style="display:flex;gap:6px;flex-wrap:wrap">'
     +(role==='dev'?'<button class="btn btn-p btn-sm" onclick="exportPaymentExcel()">📊 엑셀 다운로드</button>':'')
-    +'<button class="btn btn-g btn-sm" onclick="loadAllData().then(()=>{navigate(\'payment\');showToast(\'새로고침 완료\',\'success\');})">🔄 새로고침</button>'
+    +'<button class="btn btn-g btn-sm" onclick="loadAllData().then(()=>{navigate(\'payment\');showToast(\'새로고침 완료\',\'success\')})">🔄 새로고침</button>'
     +'</div></div>';
-  
-  // ★ 카드 — 클릭 가능하게 + 활성 표시
+
   var activeCard=(payFilter==='all'?'all':payFilter);
-  html += '<div class="sgrid sg4">'
+  html+='<div class="sgrid sg4">'
     +'<div class="scard" style="cursor:pointer'+(activeCard==='pending'?';border:2px solid var(--accent)':'')+'" onclick="setPF(\'pending\')"><div class="scard-top"><div class="slabel">대기</div><div class="sicon" style="background:rgba(240,180,41,.12);color:var(--accent)">⏳</div></div><div class="sval" style="color:var(--accent)">'+pendCnt+'</div></div>'
     +'<div class="scard" style="cursor:pointer'+(activeCard==='approved'?';border:2px solid var(--green)':'')+'" onclick="setPF(\'approved\')"><div class="scard-top"><div class="slabel">승인</div><div class="sicon" style="background:rgba(39,174,96,.12);color:var(--green)">✓</div></div><div class="sval" style="color:var(--green)">'+apprCnt+'</div></div>'
     +'<div class="scard" style="cursor:pointer'+(activeCard==='rejected'?';border:2px solid var(--red)':'')+'" onclick="setPF(\'rejected\')"><div class="scard-top"><div class="slabel">거절</div><div class="sicon" style="background:rgba(231,76,60,.12);color:var(--red)">✗</div></div><div class="sval">'+rejCnt+'</div></div>'
-    +'<div class="scard" style="border-top:2px solid var(--accent)"><div class="scard-top"><div class="slabel">최근 30일 매출</div><div class="sicon" style="background:rgba(240,180,41,.12);color:var(--accent)">📅</div></div><div class="sval" style="color:var(--accent)">₩'+monthRev.toLocaleString()+'</div><div class="ssub">누적 ₩'+totalRev.toLocaleString()+'</div></div>'
+    +(filterRev!==null
+      ?'<div class="scard" style="border-top:2px solid var(--blue)"><div class="scard-top"><div class="slabel">📅 기간 매출</div><div class="sicon" style="background:rgba(41,128,185,.12);color:var(--blue)">🗓</div></div><div class="sval" style="color:var(--blue)">₩'+filterRev.toLocaleString()+'</div><div class="ssub" style="font-size:10px">'+filterRevLabel+'</div></div>'
+      :'<div class="scard" style="border-top:2px solid var(--accent)"><div class="scard-top"><div class="slabel">최근 30일 매출</div><div class="sicon" style="background:rgba(240,180,41,.12);color:var(--accent)">📅</div></div><div class="sval" style="color:var(--accent)">₩'+monthRev.toLocaleString()+'</div><div class="ssub">누적 ₩'+totalRev.toLocaleString()+'</div></div>'
+    )
     +'</div>';
-  
-  // 일별 매출 차트
+
   var sortedDays=Object.keys(dayRev).sort().reverse();
   var hasAnyRev=sortedDays.some(k=>dayRev[k]>0);
-  
+
   html+='<div class="card" style="padding:14px;margin-bottom:12px"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px"><div class="card-title">📅 일별 매출 — 최근 30일</div><span style="font-size:11px;color:var(--text2)">승인된 결제만 집계</span></div>';
   if(!hasAnyRev){
     html+='<div class="empty" style="padding:20px"><div style="font-size:24px;opacity:.3">📊</div><div style="font-size:12px;color:var(--text3);margin-top:6px">최근 30일 동안 승인된 결제가 없습니다</div></div>';
@@ -2861,7 +2880,7 @@ function renderPayment(){
   // ★ 검색 + 날짜 필터 + 정리 버튼 박스
   html += '<div class="card" style="padding:14px;margin-bottom:10px">'
     +'<div style="display:flex;flex-wrap:wrap;gap:10px;align-items:center">'
-    +'<div style="flex:1;min-width:220px"><div style="display:flex;gap:6px"><input type="text" class="fi2" id="pay-search" placeholder="🔍 회원 이름/아이디/입금자명/전화" value="'+(paySearch||'').replace(/"/g,'&quot;')+'" style="flex:1" oninput="paySearch=this.value;rerenderPaymentDebounced()" onkeydown="if(event.key===\'Enter\'){clearTimeout(window.__pyTimer);rerenderPayments()}" ><button class="btn btn-g btn-sm" style="white-space:nowrap" onclick="clearTimeout(window.__pyTimer);rerenderPayments()">검색</button></div></div>'
+    +'<div style="flex:1;min-width:220px"><div style="display:flex;gap:6px"><input type="text" class="fi2" id="pay-search" placeholder="🔍 회원 이름/아이디/입금자명/전화" value="'+(paySearch||'').replace(/"/g,'&quot;')+'" style="flex:1" oninput="paySearch=this.value" onkeydown="if(event.key===\'Enter\'){clearTimeout(window.__pyTimer);rerenderPayments()}" ><button class="btn btn-g btn-sm" style="white-space:nowrap" onclick="clearTimeout(window.__pyTimer);rerenderPayments()">검색</button></div></div>'
     +'<div style="display:flex;gap:6px;align-items:center"><span style="font-size:11px;color:var(--text3)">📅</span><input type="date" class="fi2" style="width:140px" id="pay-from" value="'+(payDateFrom||'')+'" onchange="payDateFrom=this.value;navigate(\'payment\')"><span style="font-size:11px;color:var(--text3)">~</span><input type="date" class="fi2" style="width:140px" id="pay-to" value="'+(payDateTo||'')+'" onchange="payDateTo=this.value;navigate(\'payment\')"></div>'
     +'<button class="btn btn-g btn-sm" onclick="clearPayFilters()">🗑 필터 초기화</button>'
     +(role==='dev'?'<button class="btn btn-d btn-sm" onclick="cleanupOldPayments()">📦 처리완료 정리</button>':'')
@@ -3065,15 +3084,20 @@ function exportMemberExcel(){
   if(list.length===0){showToast('다운로드할 데이터가 없습니다','info');return;}
 
   var rows = [
-    ['번호','이름','아이디','전화번호','앱','소속','플랜','이용권 만료','가입일','최근 로그인','상태']
+    ['번호','이름','아이디','전화번호','앱','기기수','소속','플랜','이용권 만료','가입일','최근 로그인','상태']
   ];
   list.forEach((m,i) => {
+    // 기기 수 (메인 기기 1개 + 추가 기기)
+    var deviceCount = m.devices ? m.devices.length : 1;
+    // 앱 표시
+    var appLabel = m.appType==='next' ? '토스' : m.appType==='grab' ? '그랩' : (m.appType||'-');
     rows.push([
       i+1,
-      m.realName||'',
+      m.realName || m.name || '',
       m.username||'',
       m.phone||'',
-      m.appType==='next'?'토스':'그랩',
+      appLabel,
+      deviceCount,
       m.branchName||'',
       m.plan==='free'?'무료':'유료',
       m.expire||'-',
@@ -3084,7 +3108,7 @@ function exportMemberExcel(){
   });
 
   var ws = XLSX.utils.aoa_to_sheet(rows);
-  ws['!cols'] = [4,8,10,12,6,8,6,12,10,14,6].map(w=>({wch:w}));
+  ws['!cols'] = [4,10,12,14,6,6,10,6,12,10,14,6].map(w=>({wch:w}));
   var wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws, '회원목록');
 
@@ -3904,9 +3928,9 @@ function renderSettings(){
     +'<div class="fg" style="margin:0"><label class="fl">APK 다운로드 링크</label>'
     +'<input class="fi2" id="set-nextapk" value="'+get('next_apk_url','')+'" placeholder="https://github.com/.../TO-SS.apk" style="font-size:11px"></div>'
     +(role==='dev'?
-      '<div class="fg" style="margin-top:8px;margin-bottom:0;border-top:1px solid rgba(231,76,60,.2);padding-top:8px"><label class="fl" style="color:var(--c-dev)">⏰ 업데이트 예약 시각 <span style="font-size:10px;font-weight:400;color:var(--text3)">(개발자 전용 — 비워두면 즉시 적용)</span></label>'
-      +'<input class="fi2" id="set-nextschedule" type="datetime-local" value="'+get('next_update_schedule_at','')+""+' style="font-size:12px"></div>'
-      +'<div style="font-size:10px;color:var(--text3);margin-top:4px;margin-bottom:4px">설정한 날짜/시간 이후 앱 실행 시 업데이트 팝업 표시</div>'
+      '<div style="margin-top:8px;border-top:1px solid rgba(231,76,60,.2);padding-top:8px"><label class="fl" style="color:var(--c-dev)">⏰ 업데이트 예약 시각 <span style="font-size:10px;font-weight:400;color:var(--text3)">(개발자 전용 — 비워두면 즉시 적용, KST 24시간)</span></label>'
+      +buildScheduleUI('set-nextschedule', get('next_update_schedule_at',''))
+      +'<div style="font-size:10px;color:var(--text3);margin-top:4px;margin-bottom:4px">날짜+시간 선택 또는 직접 입력 (예: 2026-07-15T09:00)</div></div>'
     :'')
     +'</div>'
     // 그랩
@@ -3919,9 +3943,9 @@ function renderSettings(){
     +'<div class="fg" style="margin:0"><label class="fl">APK 다운로드 링크</label>'
     +'<input class="fi2" id="set-grabapk" value="'+get('grab_apk_url','')+'" placeholder="https://github.com/.../Grab.apk" style="font-size:11px"></div>'
     +(role==='dev'?
-      '<div class="fg" style="margin-top:8px;margin-bottom:0;border-top:1px solid rgba(231,76,60,.2);padding-top:8px"><label class="fl" style="color:var(--c-dev)">⏰ 업데이트 예약 시각 <span style="font-size:10px;font-weight:400;color:var(--text3)">(개발자 전용 — 비워두면 즉시 적용)</span></label>'
-      +'<input class="fi2" id="set-grabschedule" type="datetime-local" value="'+get('grab_update_schedule_at','')+""+' style="font-size:12px"></div>'
-      +'<div style="font-size:10px;color:var(--text3);margin-top:4px;margin-bottom:4px">설정한 날짜/시간 이후 앱 실행 시 업데이트 팝업 표시</div>'
+      '<div style="margin-top:8px;border-top:1px solid rgba(231,76,60,.2);padding-top:8px"><label class="fl" style="color:var(--c-dev)">⏰ 업데이트 예약 시각 <span style="font-size:10px;font-weight:400;color:var(--text3)">(개발자 전용 — 비워두면 즉시 적용, KST 24시간)</span></label>'
+      +buildScheduleUI('set-grabschedule', get('grab_update_schedule_at',''))
+      +'<div style="font-size:10px;color:var(--text3);margin-top:4px;margin-bottom:4px">날짜+시간 선택 또는 직접 입력 (예: 2026-07-15T09:00)</div></div>'
     :'')
     +'</div>'
     +'</div>';
@@ -5217,6 +5241,95 @@ window.addEventListener('load', async () => {
     console.error('autoLogin error:', e);
   }
 });
+
+// ★ 업데이트 예약 시각 UI 헬퍼
+function buildScheduleUI(id, savedVal){
+  var dateVal='', hourVal='09', minVal='00';
+  if(savedVal && savedVal.includes('T')){
+    var parts=savedVal.split('T');
+    dateVal=parts[0];
+    var timeParts=(parts[1]||'00:00').split(':');
+    hourVal=timeParts[0]||'09';
+    minVal=timeParts[1]||'00';
+  }
+
+  var hourOpts='';
+  for(var h=0;h<24;h++){
+    var hh=String(h).padStart(2,'0');
+    hourOpts+='<option value="'+hh+'"'+(hourVal===hh?' selected':'')+'>'+hh+'시</option>';
+  }
+  var minOpts=['00','10','20','30','40','50'].map(function(m){
+    return '<option value="'+m+'"'+(minVal===m?' selected':'')+'>'+m+'분</option>';
+  }).join('');
+
+  // 이벤트 핸들러에서 id를 data 속성으로 전달 (따옴표 충돌 방지)
+  return '<div style="display:flex;flex-direction:column;gap:6px">'
+    +'<div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">'
+    +'<input class="fi2 sched-date" type="date" data-sid="'+id+'" value="'+dateVal+'" style="flex:1;min-width:130px" oninput="syncScheduleField(this.dataset.sid)">'
+    +'<select class="fi2 sched-hour" data-sid="'+id+'" style="width:80px" onchange="syncScheduleField(this.dataset.sid)"><option value="">시</option>'+hourOpts+'</select>'
+    +'<select class="fi2 sched-min" data-sid="'+id+'" style="width:80px" onchange="syncScheduleField(this.dataset.sid)"><option value="">분</option>'+minOpts+'</select>'
+    +'<button class="btn btn-g btn-sm" data-sid="'+id+'" onclick="clearSchedule(this.dataset.sid)" style="white-space:nowrap">🗑 초기화</button>'
+    +'</div>'
+    +'<div style="display:flex;gap:6px;align-items:center">'
+    +'<span style="font-size:11px;color:var(--text3);white-space:nowrap">또는 직접 입력:</span>'
+    +'<input class="fi2 sched-text" id="'+id+'" data-sid="'+id+'" type="text" placeholder="2026-07-10T14:00 (KST 24시간)" value="'+(savedVal||'')+'" style="flex:1;font-size:12px" oninput="syncSchedulePicker(this.dataset.sid)">'
+    +'</div>'
+    +'<div id="'+id+'-preview" style="font-size:10px;color:var(--c-dev);margin-top:2px">'+(savedVal?'⏰ 예약: '+savedVal.replace('T',' ')+' KST':'')+'</div>'
+    +'</div>';
+}
+
+function syncScheduleField(id){
+  // picker → text 동기화 (data-sid 로 요소 찾기)
+  var dateEl = document.querySelector('.sched-date[data-sid="'+id+'"]');
+  var hourEl = document.querySelector('.sched-hour[data-sid="'+id+'"]');
+  var minEl  = document.querySelector('.sched-min[data-sid="'+id+'"]');
+  var textEl = document.getElementById(id);
+  var prevEl = document.getElementById(id+'-preview');
+  if(!dateEl||!hourEl||!minEl||!textEl)return;
+  var dv=dateEl.value, hv=hourEl.value||'09', mv=minEl.value||'00';
+  if(dv){
+    textEl.value=dv+'T'+hv+':'+mv;
+    if(prevEl)prevEl.textContent='⏰ 예약: '+dv+' '+hv+':'+mv+' KST';
+  }else{
+    textEl.value='';
+    if(prevEl)prevEl.textContent='';
+  }
+}
+
+function syncSchedulePicker(id){
+  // text → picker 동기화
+  var textEl=document.getElementById(id);
+  if(!textEl)return;
+  var val=textEl.value.trim();
+  var prevEl=document.getElementById(id+'-preview');
+  if(val && val.includes('T')){
+    var parts=val.split('T');
+    var dateEl=document.querySelector('.sched-date[data-sid="'+id+'"]');
+    var hourEl=document.querySelector('.sched-hour[data-sid="'+id+'"]');
+    var minEl =document.querySelector('.sched-min[data-sid="'+id+'"]');
+    if(dateEl)dateEl.value=parts[0];
+    var tp=(parts[1]||'').split(':');
+    if(hourEl)hourEl.value=(tp[0]||'').padStart(2,'0');
+    if(minEl)minEl.value=(tp[1]||'00').padStart(2,'0');
+    if(prevEl)prevEl.textContent='⏰ 예약: '+val.replace('T',' ')+' KST';
+  }else{
+    if(prevEl)prevEl.textContent='';
+  }
+}
+
+function clearSchedule(id){
+  var dateEl=document.querySelector('.sched-date[data-sid="'+id+'"]');
+  var hourEl=document.querySelector('.sched-hour[data-sid="'+id+'"]');
+  var minEl =document.querySelector('.sched-min[data-sid="'+id+'"]');
+  var textEl=document.getElementById(id);
+  var prevEl=document.getElementById(id+'-preview');
+  if(dateEl)dateEl.value='';
+  if(hourEl)hourEl.selectedIndex=0;
+  if(minEl)minEl.selectedIndex=0;
+  if(textEl)textEl.value='';
+  if(prevEl)prevEl.textContent='';
+}
+
 </script>
 
 </body>
