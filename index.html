@@ -598,6 +598,8 @@ var memberSearch='', licenseSearch='';
 var memberDateFrom=null, memberDateTo=null;
 var licenseDateFrom=null, licenseDateTo=null;
 var licenseExpireOnly=false;  // 3일내 만료 모드
+var memberShowExpired=false;  // ★ 회원관리: 만료 회원 목록 모드
+var licenseShowExpired=false; // ★ 이용권관리: 만료 회원 목록 모드
 var revDateFrom=null, revDateTo=null;
 // ★ 소속(지점) 필터 — 회원관리/이용권관리 (2026.05.28)
 var memberBranchFilter='all';   // 'all' 또는 branch_id
@@ -781,7 +783,16 @@ function appBadge(appType){
 var today=new Date();
 function fd(d){return d.getFullYear()+'.'+(d.getMonth()+1).toString().padStart(2,'0')+'.'+d.getDate().toString().padStart(2,'0');}
 function pd(s){if(!s)return null;return new Date(s.replace(/\./g,'-'));}
-function dl(s){var d=pd(s);if(!d)return null;return Math.ceil((d-today)/86400000);}
+// ★ ISO → KST 날짜 (UTC+9 보정) — 한국 시간 기준으로 날짜 표시
+function isoToFdKST(iso){
+  if(!iso)return '';
+  var d=new Date(iso);
+  if(isNaN(d))return '';
+  // KST = UTC+9
+  var kst=new Date(d.getTime()+9*60*60*1000);
+  return kst.getUTCFullYear()+'.'+(kst.getUTCMonth()+1).toString().padStart(2,'0')+'.'+kst.getUTCDate().toString().padStart(2,'0');
+}
+function isoToFd(iso){return isoToFdKST(iso);}  // ★ 기존 isoToFd도 KST로 통일function dl(s){var d=pd(s);if(!d)return null;return Math.ceil((d-today)/86400000);}
 function expBadge(s){var n=dl(s);if(n===null)return '';if(n<0)return '<span class="badge bg-red">만료됨</span>';if(n<=3)return '<span class="badge bg-red">D-'+n+'</span>';if(n<=7)return '<span class="badge bg-yellow">D-'+n+'</span>';return '<span class="badge bg-green">D-'+n+'</span>';}
 
 function statusBadge(app){
@@ -1664,7 +1675,16 @@ function renderMembers(){
   var visMembers=members.filter(memberIsVisible).filter(memberMatchesPlatform);
   
   // 가입일 필터
+  // ★ 만료 여부 분리
+  function isMemberExpired(m){ var n=dl(m.expire); return m.status==='approved' && n!==null && n<0; }
+  var expiredMembers = visMembers.filter(isMemberExpired);
+  var expiredCount = expiredMembers.length;
+
   var list=visMembers.filter(function(m){
+    // ★ 만료 회원 모드: 만료된 회원만
+    if(memberShowExpired){ return isMemberExpired(m); }
+    // 일반 모드: 만료 회원 제외
+    if(isMemberExpired(m)) return false;
     if(memberFilter!=='all'&&m.status!==memberFilter)return false;
     // ★ 소속 필터
     if(!matchBranchFilter(m.branch_id, memberBranchFilter))return false;
@@ -1708,19 +1728,22 @@ function renderMembers(){
   var sb_={approved:'bg-green',pending:'bg-yellow',rejected:'bg-red',suspended:'bg-gray'};
   var sl={approved:'승인',pending:'대기',rejected:'거절',suspended:'정지'};
   
-  var html='<div class="ph"><div><h1>회원 관리</h1><p>실시간 동기화 — 총 '+visMembers.length+'명 (필터 적용: '+list.length+'명)</p></div><div style="display:flex;gap:6px;flex-wrap:wrap">'
+  var activeCount = visMembers.filter(function(m){ return !isMemberExpired(m); }).length;
+
+  var html='<div class="ph"><div><h1>회원 관리</h1><p>실시간 동기화 — 총 '+visMembers.length+'명 (활성: '+activeCount+'명 · 만료: '+expiredCount+'명)</p></div><div style="display:flex;gap:6px;flex-wrap:wrap">'
     +'<button class="btn btn-p" onclick="openAddMember()">+ 회원 추가</button>'
     +(role==='dev'?'<button class="btn btn-b" onclick="openAddTestMember()">⚡ 테스트 회원</button>':'')
+    +(role==='dev'?'<button class="btn btn-g" onclick="exportMemberExcel()" style="background:rgba(39,174,96,.15);color:#27ae60;border:1px solid rgba(39,174,96,.3)">📊 회원 엑셀</button>':'')
     +'<button class="btn btn-g" onclick="loadAllData().then(()=>{navigate(\'members\');showToast(\'새로고침 완료\',\'success\');})">🔄 새로고침</button>'
     +'</div></div>';
   
   // 검색 + 날짜 필터 바
   html+='<div class="card" style="padding:14px;margin-bottom:12px"><div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end">'
-    +'<div style="flex:1;min-width:200px"><label class="fl">🔍 회원 이름/아이디/전화 검색</label><input class="fi2" id="member-search" value="'+(memberSearch||'').replace(/"/g,'&quot;')+'" placeholder="이름, 아이디, 전화번호..." oninput="memberSearch=this.value;clearTimeout(window.__msTimer);window.__msTimer=setTimeout(()=>navigate(\'members\'),300)"></div>'
+    +'<div style="flex:1;min-width:200px"><label class="fl">🔍 회원 이름/아이디/전화 검색</label><div style="display:flex;gap:6px"><input class="fi2" id="member-search" value="'+(memberSearch||'').replace(/"/g,'&quot;')+'" placeholder="이름, 아이디, 전화번호..." style="flex:1" oninput="memberSearch=this.value;clearTimeout(window.__msTimer);window.__msTimer=setTimeout(()=>navigate(\'members\'),400)" onkeydown="if(event.key===\'Enter\'){clearTimeout(window.__msTimer);navigate(\'members\')}" ><button class="btn btn-g btn-sm" style="white-space:nowrap" onclick="clearTimeout(window.__msTimer);navigate(\'members\')">검색</button></div></div>'
     +'<div><label class="fl">📅 가입일 시작</label><input class="fi2" type="date" id="member-from" value="'+(memberDateFrom?fdToIsoDate(memberDateFrom):'')+'" onchange="memberDateFrom=this.value?new Date(this.value):null;navigate(\'members\')" style="width:160px"></div>'
     +'<div><label class="fl">~ 종료</label><input class="fi2" type="date" id="member-to" value="'+(memberDateTo?fdToIsoDate(memberDateTo):'')+'" onchange="memberDateTo=this.value?new Date(this.value):null;navigate(\'members\')" style="width:160px"></div>'
     +'<div style="min-width:200px"><label class="fl">🏢 소속별 보기</label>'+buildBranchFilterSelect('member-branch-filter', memberBranchFilter, "memberBranchFilter=this.value;navigate('members')")+'</div>'
-    +'<button class="btn btn-g btn-sm" onclick="memberSearch=\'\';memberDateFrom=null;memberDateTo=null;memberBranchFilter=\'all\';navigate(\'members\')">초기화</button>'
+    +'<button class="btn btn-g btn-sm" onclick="memberSearch=\'\';memberDateFrom=null;memberDateTo=null;memberBranchFilter=\'all\';memberShowExpired=false;navigate(\'members\')">초기화</button>'
     +'<button class="btn btn-g btn-sm" onclick="memberDateFrom=lastNDaysStart(7);memberDateTo=new Date();navigate(\'members\')">최근 7일</button>'
     +'<button class="btn btn-g btn-sm" onclick="memberDateFrom=lastNDaysStart(30);memberDateTo=new Date();navigate(\'members\')">최근 30일</button>'
     +'<button class="btn btn-g btn-sm" onclick="memberDateFrom=thisMonthStart();memberDateTo=thisMonthEnd();navigate(\'members\')">이번 달</button>'
@@ -2169,7 +2192,16 @@ function renderLicense(){
   var expiredCount=visAll.filter(function(m){var n=dl(m.expire);return m.status==='approved'&&n!==null&&n<0;}).length;
   
   // 필터 적용
+  // ★ 만료 여부 분리
+  function isLicExpired(m){ var n=dl(m.expire); return m.status==='approved' && n!==null && n<0; }
+  var licExpiredCount = visAll.filter(isLicExpired).length;
+  var licActiveCount  = visAll.filter(function(m){ return !isLicExpired(m); }).length;
+
   var list=visAll.filter(function(m){
+    // ★ 만료 회원 모드: 만료된 회원만
+    if(licenseShowExpired){ return isLicExpired(m); }
+    // 일반 모드: 만료 회원 제외
+    if(isLicExpired(m)) return false;
     // 3일내 만료 모드
     if(licenseExpireOnly){
       var n=dl(m.expire);
@@ -2197,21 +2229,22 @@ function renderLicense(){
   var html='<div class="ph"><div><h1>이용권 관리</h1><p>전체 '+visAll.length+'명 · 표시 '+list.length+'명</p></div><div><button class="btn btn-g" onclick="loadAllData().then(()=>{navigate(\'license\');showToast(\'새로고침 완료\',\'success\');})">🔄 새로고침</button></div></div>'
   // 통계 카드 (3일내 만료 카드는 클릭 가능)
   +'<div class="sgrid sg4">'
-  +'<div class="scard'+(licenseExpireOnly?'':'')+'" onclick="licenseExpireOnly=false;licenseSearch=\'\';licenseDateFrom=null;licenseDateTo=null;navigate(\'license\')" style="cursor:pointer"><div class="scard-top"><div class="slabel">전체 회원</div><div class="sicon" style="background:rgba(41,128,185,.12);color:var(--blue)">👥</div></div><div class="sval">'+visAll.length+'</div></div>'
-  +'<div class="scard"><div class="scard-top"><div class="slabel">활성</div><div class="sicon" style="background:rgba(39,174,96,.12);color:var(--green)">✓</div></div><div class="sval" style="color:var(--green)">'+visAll.filter(function(m){return m.status==='approved';}).length+'</div></div>'
-  +'<div class="scard" style="cursor:pointer;'+(exp3Count>0?'border-top:2px solid var(--red);':'')+(licenseExpireOnly?'background:rgba(231,76,60,.08)':'')+'" onclick="licenseExpireOnly=!licenseExpireOnly;navigate(\'license\')"><div class="scard-top"><div class="slabel">3일 내 만료'+(licenseExpireOnly?' ✓':' (클릭)')+'</div><div class="sicon" style="background:rgba(231,76,60,.12);color:var(--red)">⏰</div></div><div class="sval" style="color:'+(exp3Count>0?'var(--red)':'var(--text2)')+'">'+exp3Count+'</div></div>'
+  +'<div class="scard" style="cursor:pointer;'+((!licenseShowExpired&&!licenseExpireOnly)?'border-top:2px solid var(--blue)':'')+'" onclick="licenseShowExpired=false;licenseExpireOnly=false;licenseSearch=\'\';licenseDateFrom=null;licenseDateTo=null;navigate(\'license\')"><div class="scard-top"><div class="slabel">✅ 활성 회원</div><div class="sicon" style="background:rgba(41,128,185,.12);color:var(--blue)">👥</div></div><div class="sval" style="color:var(--blue)">'+licActiveCount+'</div></div>'
+  +'<div class="scard" style="cursor:pointer;'+(licenseShowExpired?'border-top:2px solid var(--red);background:rgba(231,76,60,.05)':'')+'" onclick="licenseShowExpired=!licenseShowExpired;licenseExpireOnly=false;navigate(\'license\')"><div class="scard-top"><div class="slabel">❌ 만료 회원'+(licenseShowExpired?' ✓':' (클릭)')+'</div><div class="sicon" style="background:rgba(231,76,60,.12);color:var(--red)">📅</div></div><div class="sval" style="color:'+(licExpiredCount>0?'var(--red)':'var(--text2)')+'">'+licExpiredCount+'</div></div>'
+  +'<div class="scard" style="cursor:pointer;'+(exp3Count>0?'border-top:2px solid var(--yellow);':'')+(licenseExpireOnly?'background:rgba(231,176,60,.08)':'')+'" onclick="licenseExpireOnly=!licenseExpireOnly;licenseShowExpired=false;navigate(\'license\')"><div class="scard-top"><div class="slabel">⏰ 3일 내 만료'+(licenseExpireOnly?' ✓':' (클릭)')+'</div><div class="sicon" style="background:rgba(231,176,60,.12);color:var(--yellow)">⏰</div></div><div class="sval" style="color:'+(exp3Count>0?'var(--yellow)':'var(--text2)')+'">'+exp3Count+'</div></div>'
   +'<div class="scard"><div class="scard-top"><div class="slabel">무료 이용자</div><div class="sicon" style="background:rgba(142,68,173,.12);color:var(--purple)">🎁</div></div><div class="sval" style="color:var(--purple)">'+visAll.filter(function(m){return m.plan==='free';}).length+'</div></div>'
   +'</div>';
   
   // 검색 + 날짜 필터 바
   html+='<div class="card" style="padding:14px;margin-bottom:12px"><div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end">'
-    +'<div style="flex:1;min-width:200px"><label class="fl">🔍 회원 이름/아이디/전화 검색</label><input class="fi2" id="lic-search" value="'+(licenseSearch||'').replace(/"/g,'&quot;')+'" placeholder="이름, 아이디, 전화..." oninput="licenseSearch=this.value;clearTimeout(window.__lsTimer);window.__lsTimer=setTimeout(()=>navigate(\'license\'),300)"></div>'
+    +'<div style="flex:1;min-width:200px"><label class="fl">🔍 회원 이름/아이디/전화 검색</label><div style="display:flex;gap:6px"><input class="fi2" id="lic-search" value="'+(licenseSearch||'').replace(/"/g,'&quot;')+'" placeholder="이름, 아이디, 전화..." style="flex:1" oninput="licenseSearch=this.value;clearTimeout(window.__lsTimer);window.__lsTimer=setTimeout(()=>navigate(\'license\'),400)" onkeydown="if(event.key===\'Enter\'){clearTimeout(window.__lsTimer);navigate(\'license\')}" ><button class="btn btn-g btn-sm" style="white-space:nowrap" onclick="clearTimeout(window.__lsTimer);navigate(\'license\')">검색</button></div></div>'
     +'<div><label class="fl">📅 만료일 시작</label><input class="fi2" type="date" id="lic-from" value="'+(licenseDateFrom?fdToIsoDate(licenseDateFrom):'')+'" onchange="licenseDateFrom=this.value?new Date(this.value):null;navigate(\'license\')" style="width:160px"></div>'
     +'<div><label class="fl">~ 종료</label><input class="fi2" type="date" id="lic-to" value="'+(licenseDateTo?fdToIsoDate(licenseDateTo):'')+'" onchange="licenseDateTo=this.value?new Date(this.value):null;navigate(\'license\')" style="width:160px"></div>'
     +'<div style="min-width:200px"><label class="fl">🏢 소속별 보기</label>'+buildBranchFilterSelect('lic-branch-filter', licenseBranchFilter, "licenseBranchFilter=this.value;navigate('license')")+'</div>'
-    +'<button class="btn btn-g btn-sm" onclick="licenseSearch=\'\';licenseDateFrom=null;licenseDateTo=null;licenseExpireOnly=false;licenseBranchFilter=\'all\';navigate(\'license\')">초기화</button>'
+    +'<button class="btn btn-g btn-sm" onclick="licenseSearch=\'\';licenseDateFrom=null;licenseDateTo=null;licenseExpireOnly=false;licenseShowExpired=false;licenseBranchFilter=\'all\';navigate(\'license\')">초기화</button>'
     +'</div>'
     +(licenseExpireOnly?'<div class="alert a-red" style="margin-top:10px;margin-bottom:0">⏰ <strong>3일 내 만료 회원만</strong> 표시 중 — 카드 다시 클릭 시 해제</div>':'')
+    +(licenseShowExpired?'<div class="alert a-red" style="margin-top:10px;margin-bottom:0">❌ <strong>만료된 회원 목록</strong> 표시 중 &nbsp;|&nbsp; <a href="#" onclick="licenseShowExpired=false;navigate(\'license\');return false" style="color:inherit;font-weight:700">활성 회원 보기</a></div>':'')
     +'</div>';
   
   html+='<div class="card" style="padding:0"><div class="card-head" style="padding:12px 16px"><div class="card-title">이용권 현황</div><span style="font-size:11px;color:var(--text2)">'+list.length+'명 표시</span></div>';
@@ -2817,7 +2850,7 @@ function renderPayment(){
   // ★ 검색 + 날짜 필터 + 정리 버튼 박스
   html += '<div class="card" style="padding:14px;margin-bottom:10px">'
     +'<div style="display:flex;flex-wrap:wrap;gap:10px;align-items:center">'
-    +'<div style="flex:1;min-width:220px"><input type="text" class="fi2" id="pay-search" placeholder="🔍 회원 이름/아이디/입금자명/전화" value="'+(paySearch||'').replace(/"/g,'&quot;')+'" oninput="paySearch=this.value;rerenderPaymentDebounced()"></div>'
+    +'<div style="flex:1;min-width:220px"><div style="display:flex;gap:6px"><input type="text" class="fi2" id="pay-search" placeholder="🔍 회원 이름/아이디/입금자명/전화" value="'+(paySearch||'').replace(/"/g,'&quot;')+'" style="flex:1" oninput="paySearch=this.value;rerenderPaymentDebounced()" onkeydown="if(event.key===\'Enter\'){clearTimeout(window.__pyTimer);rerenderPayments()}" ><button class="btn btn-g btn-sm" style="white-space:nowrap" onclick="clearTimeout(window.__pyTimer);rerenderPayments()">검색</button></div></div>'
     +'<div style="display:flex;gap:6px;align-items:center"><span style="font-size:11px;color:var(--text3)">📅</span><input type="date" class="fi2" style="width:140px" id="pay-from" value="'+(payDateFrom||'')+'" onchange="payDateFrom=this.value;navigate(\'payment\')"><span style="font-size:11px;color:var(--text3)">~</span><input type="date" class="fi2" style="width:140px" id="pay-to" value="'+(payDateTo||'')+'" onchange="payDateTo=this.value;navigate(\'payment\')"></div>'
     +'<button class="btn btn-g btn-sm" onclick="clearPayFilters()">🗑 필터 초기화</button>'
     +(role==='dev'?'<button class="btn btn-d btn-sm" onclick="cleanupOldPayments()">📦 처리완료 정리</button>':'')
@@ -2896,12 +2929,16 @@ var _payRerenderTimer=null;
 function rerenderPaymentDebounced(){
   clearTimeout(_payRerenderTimer);
   _payRerenderTimer=setTimeout(()=>{
-    // 검색만 — input focus 유지 위해 카드/표만 다시 렌더링
     document.getElementById('page-content').innerHTML=renderPayment();
-    // input focus 복원
     var inp=document.getElementById('pay-search');
     if(inp){inp.focus();var v=inp.value;inp.value='';inp.value=v;}
-  }, 200);
+  }, 300);
+}
+function rerenderPayments(){
+  // 엔터/버튼 클릭 시 즉시 실행
+  document.getElementById('page-content').innerHTML=renderPayment();
+  var inp=document.getElementById('pay-search');
+  if(inp){inp.focus();var v=inp.value;inp.value='';inp.value=v;}
 }
 function clearPayFilters(){
   paySearch='';payDateFrom=null;payDateTo=null;payFilter='all';selPayBulk.clear();
@@ -2995,6 +3032,56 @@ async function cleanupOldPayments(){
 }
 
 // ★ 개발자 전용 — 결제관리 엑셀 다운로드 (현재 필터 적용된 결과 + 요약)
+// ★ 개발자 전용 — 회원 목록 엑셀 다운로드
+function exportMemberExcel(){
+  if(role!=='dev'){showToast('엑셀 다운로드는 개발자만 가능합니다','error');return;}
+  if(typeof XLSX==='undefined'){showToast('엑셀 라이브러리 로드 실패. 새로고침 해주세요','error');return;}
+
+  // 현재 화면 필터 그대로 적용
+  var list = members.filter(m => {
+    var vis = getVisibleBranchIds();
+    if(vis !== null && vis.indexOf(m.branch_id) < 0) return false;
+    if(platform !== 'all' && m.appType !== platform) return false;
+    if(memberSearch){
+      var q = memberSearch.toLowerCase();
+      if((m.realName||'').toLowerCase().indexOf(q)<0
+        &&(m.username||'').toLowerCase().indexOf(q)<0
+        &&(m.phone||'').toLowerCase().indexOf(q)<0) return false;
+    }
+    return true;
+  });
+
+  if(list.length===0){showToast('다운로드할 데이터가 없습니다','info');return;}
+
+  var rows = [
+    ['번호','이름','아이디','전화번호','앱','소속','플랜','이용권 만료','가입일','최근 로그인','상태']
+  ];
+  list.forEach((m,i) => {
+    rows.push([
+      i+1,
+      m.realName||'',
+      m.username||'',
+      m.phone||'',
+      m.appType==='next'?'토스':'그랩',
+      m.branchName||'',
+      m.plan==='free'?'무료':'유료',
+      m.expire||'-',
+      m.createdAt?isoToFdKST(m.createdAt):'-',
+      m.lastLoginAt?isoToFdKST(m.lastLoginAt):'-',
+      m.paused?'일시정지':m.blocked?'차단':'정상'
+    ]);
+  });
+
+  var ws = XLSX.utils.aoa_to_sheet(rows);
+  ws['!cols'] = [4,8,10,12,6,8,6,12,10,14,6].map(w=>({wch:w}));
+  var wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, '회원목록');
+
+  var dateStr = fd(new Date()).replace(/\./g,'');
+  XLSX.writeFile(wb, '회원목록_'+dateStr+'.xlsx');
+  showToast('엑셀 다운로드 완료 (총 '+list.length+'명)','success');
+}
+
 function exportPaymentExcel(){
   if(role!=='dev'){showToast('엑셀 다운로드는 개발자만 가능합니다','error');return;}
   if(typeof XLSX==='undefined'){showToast('엑셀 라이브러리 로드 실패. 새로고침 해주세요','error');return;}
@@ -3805,6 +3892,11 @@ function renderSettings(){
     +'<input class="fi2" id="set-nextver" value="'+get('next_latest_version','16')+'" placeholder="24" inputmode="numeric"></div></div>'
     +'<div class="fg" style="margin:0"><label class="fl">APK 다운로드 링크</label>'
     +'<input class="fi2" id="set-nextapk" value="'+get('next_apk_url','')+'" placeholder="https://github.com/.../TO-SS.apk" style="font-size:11px"></div>'
+    +(role==='dev'?
+      '<div class="fg" style="margin-top:8px;margin-bottom:0;border-top:1px solid rgba(231,76,60,.2);padding-top:8px"><label class="fl" style="color:var(--c-dev)">⏰ 업데이트 예약 시각 <span style="font-size:10px;font-weight:400;color:var(--text3)">(개발자 전용 — 비워두면 즉시 적용)</span></label>'
+      +'<input class="fi2" id="set-nextschedule" type="datetime-local" value="'+get('next_update_schedule_at','')+""+' style="font-size:12px"></div>'
+      +'<div style="font-size:10px;color:var(--text3);margin-top:4px;margin-bottom:4px">설정한 날짜/시간 이후 앱 실행 시 업데이트 팝업 표시</div>'
+    :'')
     +'</div>'
     // 그랩
     +'<div style="background:var(--bg3);border-radius:7px;padding:12px">'
@@ -3815,6 +3907,11 @@ function renderSettings(){
     +'<input class="fi2" id="set-grabver" value="'+get('grab_latest_version','16')+'" placeholder="24" inputmode="numeric"></div></div>'
     +'<div class="fg" style="margin:0"><label class="fl">APK 다운로드 링크</label>'
     +'<input class="fi2" id="set-grabapk" value="'+get('grab_apk_url','')+'" placeholder="https://github.com/.../Grab.apk" style="font-size:11px"></div>'
+    +(role==='dev'?
+      '<div class="fg" style="margin-top:8px;margin-bottom:0;border-top:1px solid rgba(231,76,60,.2);padding-top:8px"><label class="fl" style="color:var(--c-dev)">⏰ 업데이트 예약 시각 <span style="font-size:10px;font-weight:400;color:var(--text3)">(개발자 전용 — 비워두면 즉시 적용)</span></label>'
+      +'<input class="fi2" id="set-grabschedule" type="datetime-local" value="'+get('grab_update_schedule_at','')+""+' style="font-size:12px"></div>'
+      +'<div style="font-size:10px;color:var(--text3);margin-top:4px;margin-bottom:4px">설정한 날짜/시간 이후 앱 실행 시 업데이트 팝업 표시</div>'
+    :'')
     +'</div>'
     +'</div>';
   }
@@ -3897,9 +3994,11 @@ async function saveAppSettings(){
     if(document.getElementById('set-nextver'))pairs.next_latest_version=document.getElementById('set-nextver').value.trim();
     if(document.getElementById('set-nextvname'))pairs.next_latest_version_name=document.getElementById('set-nextvname').value.trim();
     if(document.getElementById('set-nextapk'))pairs.next_apk_url=document.getElementById('set-nextapk').value.trim();
+    if(document.getElementById('set-nextschedule'))pairs.next_update_schedule_at=document.getElementById('set-nextschedule').value.trim();
     if(document.getElementById('set-grabver'))pairs.grab_latest_version=document.getElementById('set-grabver').value.trim();
     if(document.getElementById('set-grabvname'))pairs.grab_latest_version_name=document.getElementById('set-grabvname').value.trim();
     if(document.getElementById('set-grabapk'))pairs.grab_apk_url=document.getElementById('set-grabapk').value.trim();
+    if(document.getElementById('set-grabschedule'))pairs.grab_update_schedule_at=document.getElementById('set-grabschedule').value.trim();
   }
   try{
     for(var k in pairs){
@@ -4738,6 +4837,27 @@ function renderOrgManage(){
       +'<div style="display:flex;gap:4px;flex-wrap:wrap" onclick="event.stopPropagation()">'+nodeActions(b)+'</div>'
       +'</div>'
       +'<div style="padding:0 14px 10px;font-size:11px;color:var(--text3)">담당: '+(b.manager_name||'-')+(b.manager_phone?' / '+b.manager_phone:'')+' · '+(b.operating_hours||'-')+'</div>';
+    // ★ 메모 영역 (상위 role만 볼 수 있음 — 해당 지점 본인에게 숨김)
+    var canSeeMemo=false;
+    if(role==='dev') canSeeMemo=true;
+    else if(role==='master') canSeeMemo=(b.id!==realBranchId); // 총판은 자기 자신 제외 산하 모두
+    else if(role==='branch') canSeeMemo=(b.type==='sub');      // 지사는 산하 지점만
+    if(canSeeMemo){
+      var memoId='org-memo-'+b.id;
+      var memoVal=(b.admin_memo||'');
+      var hasMemo=!!(memoVal.trim());
+      h+='<div style="padding:2px 14px 10px">';
+      if(hasMemo){
+        h+='<div style="background:rgba(231,76,60,.07);border-left:3px solid #e74c3c;padding:7px 10px;border-radius:0 6px 6px 0;font-size:11px;color:var(--text2);white-space:pre-wrap;margin-bottom:6px">'
+          +'<span style="font-size:10px;color:#e74c3c;font-weight:600">📝 관리 메모</span><br>'
+          +memoVal.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')+'</div>';
+      }
+      h+='<div style="display:flex;gap:6px;align-items:flex-start">'
+        +'<textarea id="'+memoId+'" rows="2" class="fi2" style="flex:1;font-size:11px;resize:vertical;min-height:48px" placeholder="상위 메모 (하위 지점에는 보이지 않음)" onclick="event.stopPropagation()" onkeydown="event.stopPropagation()">'+memoVal+'</textarea>'
+        +'<button class="btn btn-g btn-sm" style="white-space:nowrap;align-self:flex-end" onclick="event.stopPropagation();saveBranchMemo('+b.id+',\''+memoId+'\')">저장</button>'
+        +'</div>'
+        +'</div>';
+    }
     
     if(hasChildren){
       h+='<div id="'+nodeId+'-body" class="ochildren" style="display:'+(defaultOpen?'block':'none')+'">';
@@ -4763,6 +4883,27 @@ function renderOrgManage(){
 }
 
 // 노드 접기/펼치기 토글
+// ★ 지점 메모 저장 (상위 관리자 전용)
+async function saveBranchMemo(branchId, textareaId){
+  var ta = document.getElementById(textareaId);
+  if(!ta) return;
+  var memo = ta.value.trim();
+  var btn = ta.nextElementSibling;
+  if(btn){ btn.disabled=true; btn.textContent='저장 중...'; }
+  try {
+    var {error} = await sb.from('branches').update({admin_memo: memo}).eq('id', branchId);
+    if(error) throw error;
+    // 로컬 캐시 업데이트
+    var b = branches.find(x=>x.id===branchId);
+    if(b) b.admin_memo = memo;
+    showToast('메모 저장됨', 'success');
+    if(btn){ btn.disabled=false; btn.textContent='저장'; }
+  } catch(e) {
+    showToast('저장 실패: '+e.message, 'error');
+    if(btn){ btn.disabled=false; btn.textContent='저장'; }
+  }
+}
+
 function toggleOrgNode(nodeId,headerEl){
   var body=document.getElementById(nodeId+'-body');
   var arrow=document.getElementById(nodeId+'-arrow');
@@ -5069,3 +5210,13 @@ window.addEventListener('load', async () => {
 
 </body>
 </html>
+
+
+  // ★ 만료 회원 통계 카드
+  html+='<div class="sgrid sg4" style="margin-bottom:12px">'
+    +'<div class="scard" style="cursor:pointer;'+(memberShowExpired?'':'border-top:2px solid var(--blue)')+';" onclick="memberShowExpired=false;navigate(\'members\')"><div class="scard-top"><div class="slabel">✅ 활성 회원</div><div class="sicon" style="background:rgba(41,128,185,.12);color:var(--blue)">👥</div></div><div class="sval" style="color:'+(memberShowExpired?'var(--text2)':'var(--blue)')+'">'+activeCount+'</div></div>'
+    +'<div class="scard" style="cursor:pointer;'+(memberShowExpired?'border-top:2px solid var(--red);background:rgba(231,76,60,.05)':'')+'" onclick="memberShowExpired=true;navigate(\'members\')"><div class="scard-top"><div class="slabel">❌ 만료 회원'+(memberShowExpired?' ✓':' (클릭)')+'</div><div class="sicon" style="background:rgba(231,76,60,.12);color:var(--red)">📅</div></div><div class="sval" style="color:'+(expiredCount>0?'var(--red)':'var(--text2)')+'">'+expiredCount+'</div></div>'
+    +'</div>';
+  if(memberShowExpired){
+    html+='<div class="alert a-red" style="margin-bottom:12px">❌ <strong>만료된 회원 목록</strong> 표시 중 &nbsp;|&nbsp; <a href="#" onclick="memberShowExpired=false;navigate(\'members\');return false" style="color:inherit;font-weight:700">활성 회원 보기</a></div>';
+  }
