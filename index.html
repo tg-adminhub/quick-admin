@@ -2365,7 +2365,8 @@ async function adminExtendLicense(userId, days, isNew){
     var newExpire = new Date(base.getTime());
     newExpire.setDate(newExpire.getDate() + days);
 
-    var userPayload = { license_expires_at: newExpire.toISOString(), is_free_user: false };
+    var userPayload = { license_expires_at: newExpire.toISOString(), is_free_user: false, status: 'approved' }; // ★ 회원관리 승인 반영 (2026-07)
+    if(m.status !== 'approved') userPayload.approved_at = new Date().toISOString(); // 최초 승인일만 기록
     if(isNew) userPayload.is_new = false;
     var {error:ue} = await sb.from('users').update(userPayload).eq('id', userId);
     if(ue) throw ue;
@@ -2375,21 +2376,30 @@ async function adminExtendLicense(userId, days, isNew){
     var dateStr = today.getFullYear()+'.'
       +String(today.getMonth()+1).padStart(2,'0')+'.'
       +String(today.getDate()).padStart(2,'0');
-    var payPayload = {
+    // ★ payment_requests 실제 컬럼만 사용 (branch_id·app_type·username·date 는 컬럼 아님 → users 조인으로 자동 태깅됨)
+    //   지점 매출 산정은 payment 의 user_id → users.branch_id 조인으로 자동 처리됨.
+    var basePayPayload = {
       user_id: userId,
-      username: m.username,
       amount: 60000,
       approved_amount: 60000,
       status: 'approved',
       note: (isNew?'[신규]':'[연장]')+' 어드민 직접처리 ('+days+'일)',
-      date: dateStr,
-      processed_at: today.toISOString(),
-      processed_by_name: curAcc ? (curAcc.name+' (@'+curAcc.username+')') : 'admin',
-      branch_id: m.branch_id,
-      app_type: m.appType
+      processed_at: today.toISOString()
     };
+    var payPayload = Object.assign({}, basePayPayload, {
+      processed_by_admin_id: curAcc ? curAcc.id : null,
+      processed_by_name: curAcc ? (curAcc.name+' (@'+curAcc.username+')') : 'admin'
+    });
     var {error:pe} = await sb.from('payment_requests').insert(payPayload);
-    if(pe) console.warn('[adminExtendLicense] 결제기록 생성 실패 (이용권은 연장됨):', pe.message);
+    if(pe && /processed_by_admin_id|processed_by_name|schema cache/i.test(pe.message||'')){
+      // 처리자 컬럼이 없는 스키마 → 최소 페이로드로 재시도 (doApproveP 와 동일 방어)
+      var retry = await sb.from('payment_requests').insert(basePayPayload);
+      pe = retry.error;
+    }
+    if(pe){
+      console.error('[adminExtendLicense] 결제기록 생성 실패:', pe.message);
+      showToast('⚠ 이용권은 연장됐으나 매출/결제 기록 생성 실패: '+pe.message, 'error');
+    }
 
     // 3) 로컬 캐시 갱신
     m.licenseExpiresAt = newExpire.toISOString();
