@@ -489,7 +489,7 @@ tr:last-child td{border-bottom:none}tr:hover td{background:rgba(255,255,255,.015
   <div class="modal-box" style="max-width:580px">
     <div class="mh"><div class="mt" id="dev-title">기기 관리</div><button class="mc" onclick="cancelAllDevChanges()">×</button></div>
     <input type="hidden" id="dev-mid" value="">
-    <div class="alert a-blue">📱 메인폰 포함 최대 4대 (메인 1대 + 추가 최대 3대) — 변경 후 <strong>저장하기</strong> 버튼 필수</div>
+    <div class="alert a-blue">📱 메인폰 포함 최대 5대 (메인 1대 + 추가 최대 4대) — 변경 후 <strong>저장하기</strong> 버튼 필수</div>
     <div id="dev-list"></div>
     <div id="dev-add-area" style="margin-top:12px"></div>
     <div style="margin-top:14px;padding:10px 12px;background:var(--bg3);border-radius:7px;display:flex;justify-content:space-between;align-items:center">
@@ -2438,7 +2438,7 @@ async function toggleFree(id){
 }
 
 // =====================================================================
-//   DEVICE MANAGEMENT — 회원 기기 추가/삭제 (메인 1대 + 추가 최대 3대)
+//   DEVICE MANAGEMENT — 회원 기기 추가/삭제 (메인 1대 + 추가 최대 4대)
 //   ★ 펜딩 변경 모델: 추가/삭제는 임시로 화면에만 반영 → "저장" 클릭 시 DB 반영
 // =====================================================================
 var devPending={
@@ -2534,12 +2534,12 @@ function renderDevList(m){
   // 기기 추가 영역 (현재+펜딩 합쳐서 4대 미만일 때만)
   var totalCnt=devs.filter(d=>devPending.removes.indexOf(d.id)<0).length+devPending.adds.length;
   var addArea=document.getElementById('dev-add-area');
-  if(totalCnt<4){
+  if(totalCnt<5){
     var nextNum=devs.filter(d=>!d.main).length+devPending.adds.length+1;
     var autoLabel=m.name+nextNum;
     
     addArea.innerHTML='<div style="border:1px dashed var(--border);border-radius:8px;padding:14px;background:var(--bg3)">'
-      +'<div style="font-size:11px;color:var(--text2);margin-bottom:10px">➕ 추가 기기 (최대 '+(4-totalCnt)+'대 더 추가 가능)</div>'
+      +'<div style="font-size:11px;color:var(--text2);margin-bottom:10px">➕ 추가 기기 (최대 '+(5-totalCnt)+'대 더 추가 가능)</div>'
       +'<div style="background:var(--bg4);border-radius:6px;padding:8px 10px;margin-bottom:10px;font-size:12px">'
       +'<span style="color:var(--text3)">자동 라벨:</span> <strong style="color:var(--accent);font-family:monospace">'+autoLabel+'</strong>'
       +'<span style="color:var(--text3);font-size:10px;margin-left:6px">(회원이름+번호 자동 생성)</span>'
@@ -2552,7 +2552,7 @@ function renderDevList(m){
       +'<button class="btn btn-b btn-sm" style="width:100%" onclick="addPendingDev('+m.id+')">+ '+autoLabel+' 기기추가</button>'
       +'</div>';
   } else {
-    addArea.innerHTML='<div class="alert a-yellow">⚠️ 최대 4대 한도 도달 (메인폰 1 + 추가 3)</div>';
+    addArea.innerHTML='<div class="alert a-yellow">⚠️ 최대 5대 한도 도달 (메인폰 1 + 추가 4)</div>';
   }
   
   // 펜딩 변경사항 안내
