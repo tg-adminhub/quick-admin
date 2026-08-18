@@ -482,6 +482,23 @@ tr:last-child td{border-bottom:none}tr:hover td{background:rgba(255,255,255,.015
     <div class="fg"><label class="fl">운영 시간</label><input class="fi2" id="eo-hours" placeholder="10:00~18:00"></div>
     <div class="fg"><label class="fl">담당자</label><input class="fi2" id="eo-contact" placeholder="담당자명"></div>
     <div class="fg"><label class="fl">담당자 연락처</label><input class="fi2" id="eo-phone" placeholder="010-0000-0000"></div>
+
+    <!-- ★★★ 2026-08-18: 총판 전용 — 소속 이동 / 등급 변경 (본인 산하만) -->
+    <div id="eo-master-zone" style="display:none;margin-top:14px;padding-top:12px;border-top:1px dashed var(--border)">
+      <div class="alert a-blue" style="margin-bottom:10px">🏢 총판 전용 — 본인 산하 조직의 소속과 등급을 바꿀 수 있습니다. (삭제가 아니라 수정이라 소속 회원은 그대로 유지됩니다)</div>
+      <div class="fg"><label class="fl">등급</label>
+        <div class="fd">지사 ↔ 지점 변경. 지사를 지점으로 내리면 그 아래 지점들은 상위 조직으로 자동 이동됩니다.</div>
+        <select class="fi2" id="eo-type" onchange="onEoTypeChange()">
+          <option value="branch">지사</option>
+          <option value="sub">지점</option>
+        </select>
+      </div>
+      <div class="fg" id="eo-parent-wrap"><label class="fl">소속 (상위 조직)</label>
+        <div class="fd">이 조직이 어느 조직 밑으로 들어갈지 선택합니다.</div>
+        <select class="fi2" id="eo-parent"></select>
+      </div>
+    </div>
+
     <div style="display:flex;gap:8px;margin-top:14px">
       <button class="btn btn-g" style="flex:1" onclick="closeModal('modal-edit-org')">취소</button>
       <button class="btn btn-p" style="flex:1" onclick="saveEditOrg()">저장</button>
@@ -4523,7 +4540,48 @@ function openEditOrg(id){
   document.getElementById('eo-hours').value=b.operating_hours||'';
   document.getElementById('eo-contact').value=b.manager_name||'';
   document.getElementById('eo-phone').value=b.manager_phone||'';
+
+  // ★★★ 2026-08-18: 총판(또는 개발자)일 때만 소속/등급 변경 노출.
+  //   총판 본인 조직(master)은 등급/소속을 못 바꾸게 하고, 산하 지사/지점만 대상으로 한다.
+  var mz=document.getElementById('eo-master-zone');
+  var canMaster=(role==='dev')||(role==='master');
+  var isSelfMaster=(b.type==='master');
+  if(mz){
+    if(canMaster && !isSelfMaster){
+      mz.style.display='block';
+      // 등급
+      document.getElementById('eo-type').value=(b.type==='sub')?'sub':'branch';
+      // 소속(상위 조직) 후보: 본인 산하의 master/branch 들 (자기 자신과 자기 후손은 제외 = 순환 방지)
+      var myTree = (role==='dev') ? branches.map(x=>x.id) : getDescendantBranchIds(realBranchId);
+      var descendantsOfThis = getDescendantBranchIds(b.id); // 자신+후손
+      var sel=document.getElementById('eo-parent');
+      var opts='';
+      branches.filter(function(p){
+        if(myTree.indexOf(p.id)<0) return false;        // 내 산하만
+        if(descendantsOfThis.indexOf(p.id)>=0) return false; // 자기/후손 불가(순환)
+        if(p.type==='sub') return false;                // 지점은 부모가 될 수 없음
+        return true;
+      }).forEach(function(p){
+        var lbl=({master:'총판',branch:'지사'}[p.type]||p.type)+' · '+p.name;
+        opts+='<option value="'+p.id+'"'+(p.parent_id===b.parent_id||p.id===b.parent_id?' selected':'')+'>'+lbl+'</option>';
+      });
+      // 현재 부모가 목록에 없을 수도 있으니 맨 위에 현재값 표시
+      sel.innerHTML=opts||'<option value="">(선택 가능한 상위 조직 없음)</option>';
+      if(b.parent_id!=null){ sel.value=String(b.parent_id); }
+      onEoTypeChange();
+    }else{
+      mz.style.display='none';
+    }
+  }
+
   document.getElementById('modal-edit-org').classList.add('open');
+}
+
+// ★ 등급이 '지점(sub)'이면 소속(상위) 선택은 유지, '지사(branch)'로 올려도 상위 선택 필요.
+//   지점은 반드시 상위가 있어야 하고, 지사도 총판 밑에 있어야 하므로 소속 선택은 항상 노출한다.
+function onEoTypeChange(){
+  var wrap=document.getElementById('eo-parent-wrap');
+  if(wrap) wrap.style.display='block';
 }
 
 async function saveEditOrg(){
@@ -4543,6 +4601,39 @@ async function saveEditOrg(){
       manager_phone:document.getElementById('eo-phone').value||null,
       updated_at:new Date().toISOString()
     };
+
+    // ★★★ 2026-08-18: 총판 전용 소속/등급 변경 처리 (본인 산하만)
+    var mz=document.getElementById('eo-master-zone');
+    var canMaster=(role==='dev')||(role==='master');
+    var b0=branches.find(x=>x.id===id);
+    if(mz && mz.style.display!=='none' && canMaster && b0 && b0.type!=='master'){
+      var newType=document.getElementById('eo-type').value;   // 'branch'|'sub'
+      var newParentRaw=document.getElementById('eo-parent').value;
+      var newParent=newParentRaw?parseInt(newParentRaw):null;
+
+      // 권한: 대상과 새 상위 모두 본인 산하여야 함
+      var myTree=(role==='dev')?null:getDescendantBranchIds(realBranchId);
+      if(myTree){
+        if(myTree.indexOf(id)<0){showToast('본인 산하 조직만 변경할 수 있습니다','error');return;}
+        if(newParent!=null && myTree.indexOf(newParent)<0){showToast('본인 산하로만 소속을 옮길 수 있습니다','error');return;}
+      }
+      // 순환 방지: 새 상위가 자기 자신/후손이면 안 됨
+      var desc=getDescendantBranchIds(id);
+      if(newParent!=null && desc.indexOf(newParent)>=0){showToast('하위 조직을 상위로 지정할 수 없습니다','error');return;}
+
+      // 지사→지점으로 내리는데 딸린 지점이 있으면, 그 지점들을 이 조직의 상위로 자동 이동
+      if(newType==='sub'){
+        var kids=branches.filter(x=>x.parent_id===id);
+        if(kids.length>0){
+          var moveTo=(newParent!=null)?newParent:b0.parent_id;
+          const {error:ek}=await sb.from('branches').update({parent_id:moveTo}).eq('parent_id',id);
+          if(ek)throw ek;
+        }
+      }
+      payload.type=newType;
+      payload.parent_id=newParent;
+    }
+
     const {error}=await sb.from('branches').update(payload).eq('id',id);
     if(error)throw error;
     closeModal('modal-edit-org');
