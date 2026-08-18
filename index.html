@@ -255,6 +255,11 @@ tr:last-child td{border-bottom:none}tr:hover td{background:rgba(255,255,255,.015
     </div>
     <div class="fgroup"><label>아이디</label><input class="finput" id="l-id" placeholder="아이디 입력"></div>
     <div class="fgroup"><label>비밀번호</label><input class="finput" type="password" id="l-pw" placeholder="비밀번호 입력"></div>
+    <!-- ★ 2026-08-18: 아이디 저장 체크박스 -->
+    <label style="display:flex;align-items:center;gap:8px;margin:4px 0 14px;font-size:13px;color:var(--text2);cursor:pointer;user-select:none">
+      <input type="checkbox" id="l-save-id" style="width:16px;height:16px;cursor:pointer;accent-color:var(--accent)">
+      아이디 저장
+    </label>
     <button class="btn-main" id="login-btn" onclick="doLogin()">로그인</button>
     <div id="login-err" style="display:none;margin-top:10px;text-align:center;font-size:12px;color:var(--red);background:rgba(231,76,60,.08);border:1px solid rgba(231,76,60,.2);border-radius:7px;padding:8px">아이디 또는 비밀번호가 올바르지 않습니다</div>
   </div>
@@ -867,6 +872,16 @@ async function doLogin(){
     role=realRole;
     user={name:data.name,id:data.username,orgId:data.branch_id,dbId:data.id};
     
+    // ★ 2026-08-18: 아이디 저장 체크 시 아이디만 기억 (비번은 저장 안 함)
+    try{
+      var saveIdEl=document.getElementById('l-save-id');
+      if(saveIdEl && saveIdEl.checked){
+        localStorage.setItem('qa_saved_id', id);
+      }else{
+        localStorage.removeItem('qa_saved_id');
+      }
+    }catch(e){}
+
     // ★ 세션 저장 (페이지 새로고침 후 자동 로그인) — 2026.05.27
     try{
       localStorage.setItem('qa_session', JSON.stringify({
@@ -5384,6 +5399,21 @@ if ('serviceWorker' in navigator) {
 }
 
 // ★ 페이지 로드 시 자동 로그인 시도 (10분 이내 활동했으면) — 2026.05.27
+// ★ 2026-08-18: 저장된 아이디 복원 → 아이디 채우고 비번칸으로 포커스
+window.addEventListener('DOMContentLoaded', () => {
+  try{
+    var savedId=localStorage.getItem('qa_saved_id');
+    if(savedId){
+      var idEl=document.getElementById('l-id');
+      var pwEl=document.getElementById('l-pw');
+      var chkEl=document.getElementById('l-save-id');
+      if(idEl){idEl.value=savedId;}
+      if(chkEl){chkEl.checked=true;}
+      if(pwEl){setTimeout(function(){pwEl.focus();},100);}  // 비번만 치면 되게
+    }
+  }catch(e){}
+});
+
 window.addEventListener('load', async () => {
   try{
     await tryAutoLogin();
