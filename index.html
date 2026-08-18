@@ -489,6 +489,7 @@ tr:last-child td{border-bottom:none}tr:hover td{background:rgba(255,255,255,.015
       <div class="fg"><label class="fl">등급</label>
         <div class="fd">지사 ↔ 지점 변경. 지사를 지점으로 내리면 그 아래 지점들은 상위 조직으로 자동 이동됩니다.</div>
         <select class="fi2" id="eo-type" onchange="onEoTypeChange()">
+          <option value="master">총판</option>
           <option value="branch">지사</option>
           <option value="sub">지점</option>
         </select>
@@ -4544,13 +4545,14 @@ function openEditOrg(id){
   // ★★★ 2026-08-18: 총판(또는 개발자)일 때만 소속/등급 변경 노출.
   //   총판 본인 조직(master)은 등급/소속을 못 바꾸게 하고, 산하 지사/지점만 대상으로 한다.
   var mz=document.getElementById('eo-master-zone');
-  var canMaster=(role==='dev')||(role==='master');
-  var isSelfMaster=(b.type==='master');
+  //  개발자: 최상위 → 총판 포함 모든 조직의 등급/소속 변경 가능.
+  //  총판: 산하 지사/지점만 (자기 자신인 총판 조직은 제외).
+  var showMasterZone = (role==='dev') ? true : (role==='master' && b.type!=='master');
   if(mz){
-    if(canMaster && !isSelfMaster){
+    if(showMasterZone){
       mz.style.display='block';
       // 등급
-      document.getElementById('eo-type').value=(b.type==='sub')?'sub':'branch';
+      document.getElementById('eo-type').value=b.type; // master/branch/sub 그대로
       // 소속(상위 조직) 후보: 본인 산하의 master/branch 들 (자기 자신과 자기 후손은 제외 = 순환 방지)
       var myTree = (role==='dev') ? branches.map(x=>x.id) : getDescendantBranchIds(realBranchId);
       var descendantsOfThis = getDescendantBranchIds(b.id); // 자신+후손
@@ -4581,7 +4583,10 @@ function openEditOrg(id){
 //   지점은 반드시 상위가 있어야 하고, 지사도 총판 밑에 있어야 하므로 소속 선택은 항상 노출한다.
 function onEoTypeChange(){
   var wrap=document.getElementById('eo-parent-wrap');
-  if(wrap) wrap.style.display='block';
+  var t=document.getElementById('eo-type').value;
+  // 총판(master)은 최상위라 상위 조직이 없다 → 소속 선택 숨김.
+  // 지사/지점은 반드시 상위가 있어야 하므로 표시.
+  if(wrap) wrap.style.display=(t==='master')?'none':'block';
 }
 
 async function saveEditOrg(){
@@ -4606,12 +4611,15 @@ async function saveEditOrg(){
     var mz=document.getElementById('eo-master-zone');
     var canMaster=(role==='dev')||(role==='master');
     var b0=branches.find(x=>x.id===id);
-    if(mz && mz.style.display!=='none' && canMaster && b0 && b0.type!=='master'){
-      var newType=document.getElementById('eo-type').value;   // 'branch'|'sub'
+    var editable = (role==='dev') ? true : (role==='master' && b0 && b0.type!=='master');
+    if(mz && mz.style.display!=='none' && editable && b0){
+      var newType=document.getElementById('eo-type').value;   // 'master'|'branch'|'sub'
       var newParentRaw=document.getElementById('eo-parent').value;
       var newParent=newParentRaw?parseInt(newParentRaw):null;
+      // 총판(master)은 최상위 → 상위 없음
+      if(newType==='master') newParent=null;
 
-      // 권한: 대상과 새 상위 모두 본인 산하여야 함
+      // 권한: 대상과 새 상위 모두 본인 산하여야 함 (개발자는 제한 없음)
       var myTree=(role==='dev')?null:getDescendantBranchIds(realBranchId);
       if(myTree){
         if(myTree.indexOf(id)<0){showToast('본인 산하 조직만 변경할 수 있습니다','error');return;}
