@@ -1182,7 +1182,9 @@ function buildSidebar(){
       {s:'가이드'},
       {p:'guide-admin',ic:'book',l:'어드민 앱 설치'},
       {s:'설정'},
-      {p:'settings',ic:'cog',l:'앱 설정'}
+      {p:'settings',ic:'cog',l:'앱 설정'},
+      {s:'잡고'},
+      {p:'zapgo',ic:'users',l:'잡고 멀티 번호'}
     ],
     master:[
       {p:'dashboard',ic:'grid',l:'대시보드'},
@@ -1278,7 +1280,8 @@ function navigate(pg){
     'my-settings':renderMySettings,
     'guide-admin':renderGuideAdmin,
     'guide-next':renderGuideNext,
-    'guide-grab':renderGuideGrab
+    'guide-grab':renderGuideGrab,
+    zapgo:function(){return window.renderZapgo?window.renderZapgo():'<div class="empty"><div class="empty-icon">🔧</div><div class="empty-txt">잡고 모듈을 불러오지 못했습니다 (zapgo-admin.js)</div></div>';}
   };
   document.getElementById('page-content').innerHTML=(ps[pg]||function(){return '<div class="empty"><div class="empty-icon">🔧</div><div class="empty-txt">준비 중</div></div>';})();
   if(pg==='dashboard')setTimeout(initChart,80);
@@ -5611,5 +5614,6 @@ function clearSchedule(id){
 
 </script>
 
+<script src="zapgo-admin.js"></script>
 </body>
 </html>
