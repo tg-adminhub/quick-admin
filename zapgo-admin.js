@@ -6,7 +6,7 @@
  *    닫으면 사라지는 sessionStorage 에만 보관. 비밀번호는 어디에도 저장하지 않는다.
  *  - 어드민 로그인 시 같은 비밀번호면 자동 연결(ZG.autoLogin), 다르면 직접 로그인.
  *
- *  탭: 대시보드 / 회원 관리 / 이용권 관리 / 결제 내역 / 매출 현황 / 멀티 번호
+ *  탭: 대시보드 / 회원 관리(회원 추가·승인·연장 등) / 이용권 관리 / 결제 내역 / 매출 현황 / 멀티 번호
  *  결제 금액은 관리자가 승인·연장 때 직접 입력한다(비우면 기록하지 않음). 과거 결제는 '직접 추가'.
  *
  *  index.html 연결(5곳): 메뉴 항목 / navigate 표(zapgo) / 이 스크립트 태그 /
@@ -38,8 +38,8 @@
   var KIND = { approve: '가입 승인', extend: '기간 연장', manual: '직접 입력' };
 
   var state = {
-    all: [], loaded: false, tab: 'dash', q: '', status: '', lic: 'soon',
-    pay: [], payState: 'idle', payMonth: '' // payState: idle | ok | unavailable
+    all: [], loaded: false, memberApi: false, tab: 'dash', q: '', status: '', lic: 'soon',
+    pay: [], payState: 'idle', payErr: '', payMonth: '' // payState: idle | ok | unavailable(API 없음 404) | error(서버 오류)
   };
   var edit = null; // 번호 편집 모달 상태
   var dlg = null;  // 승인/연장 다이얼로그 상태
@@ -256,20 +256,36 @@
     }).join('');
   }
 
+  // 새 회원 API(차량 메모 포함)를 먼저 쓰고, 서버에 아직 없으면(404) 기존 목록 API 로 대체한다.
+  function loadMembers() {
+    return api('GET', '/admin/members').then(function (list) {
+      state.memberApi = true;
+      return list;
+    }, function (e) {
+      if (e && e.status === 404) {
+        state.memberApi = false;
+        return api('GET', '/admin/users');
+      }
+      throw e;
+    });
+  }
+
   function loadPayments() {
     return api('GET', '/admin/payments')
       .then(function (list) { state.pay = Array.isArray(list) ? list : []; state.payState = 'ok'; })
       .catch(function (e) {
         if (e && e.status === 401) throw e;
         state.pay = [];
-        state.payState = 'unavailable'; // 서버에 결제 API 가 아직 없음(404) 등
+        state.payErr = (e && e.message) || '';
+        // 404 = 서버에 결제 API 가 없음 / 그 외 = API 는 있는데 서버가 오류를 냄(예: DB 테이블 없음)
+        state.payState = e && e.status === 404 ? 'unavailable' : 'error';
       });
   }
 
   function loadAll() {
     if (!getToken()) { drawLogin(); return; }
     if (!document.getElementById('zg-content')) drawShell();
-    Promise.all([api('GET', '/admin/users'), loadPayments()])
+    Promise.all([loadMembers(), loadPayments()])
       .then(function (r) {
         var list = r[0];
         state.all = Array.isArray(list) ? list : [];
@@ -290,7 +306,10 @@
     if (!state.loaded) { box.innerHTML = '<div class="zg-empty">불러오는 중…</div>'; return; }
     if (state.tab === 'dash') { box.innerHTML = dashHtml(); return; }
     if (state.tab === 'revenue') { box.innerHTML = revenueHtml(); return; }
-    if (state.tab === 'payments') { box.innerHTML = paymentsBarHtml() + '<div id="zg-rows"></div>'; drawRows(); return; }
+    if (state.tab === 'payments') {
+      if (state.payState !== 'ok') { box.innerHTML = unavailableHtml(); return; }
+      box.innerHTML = paymentsBarHtml() + '<div id="zg-rows"></div>'; drawRows(); return;
+    }
     if (state.tab === 'license') {
       box.innerHTML = licenseBarHtml() + '<div id="zg-rows"></div>';
     } else {
@@ -344,13 +363,15 @@
       (pend.length ? pend.map(function (r) { return miniRow(r, 'pending'); }).join('') : '<div class="zg-empty">대기 중인 가입 요청이 없습니다</div>') +
       '<div class="zg-sec">만료 임박 · 7일 이내 (' + c.soon7 + ')</div>' +
       (soon.length ? soon.map(function (r) { return miniRow(r, 'soon'); }).join('') : '<div class="zg-empty">7일 이내 만료되는 회원이 없습니다</div>') +
-      (state.payState === 'unavailable' ? '<div class="zg-note">결제 기록 API가 서버에 아직 없어 매출이 표시되지 않습니다. (서버 업데이트 필요)</div>' : '');
+      (state.payState === 'unavailable' ? '<div class="zg-note">결제 기록 API가 서버에 아직 없어 매출이 표시되지 않습니다. (서버 업데이트 필요)</div>' : '') +
+      (state.payState === 'error' ? '<div class="zg-note" style="color:var(--red)">결제 기록을 불러오지 못해 매출이 표시되지 않습니다: ' + esc(state.payErr || '서버 오류') + '</div>' : '');
   }
 
   // ---------- 탭: 회원 관리 / 멀티 번호 ----------
   function memberBarHtml() {
     return '<div class="zg-bar">' +
       '<input id="zg-q" placeholder="이름 / 아이디 / 번호 검색" value="' + esc(state.q) + '" oninput="ZG.setQ(this.value)">' +
+      (state.tab === 'members' ? '<button class="btn btn-p btn-sm" onclick="ZG.addMember()">＋ 회원 추가</button>' : '') +
       '<select id="zg-status" onchange="ZG.setStatus(this.value)">' +
       ['', 'approved', 'pending', 'suspended', 'rejected'].map(function (v) {
         var label = v ? STATUS[v][0] : '전체 상태';
@@ -384,7 +405,9 @@
     else if (r.status === 'suspended') acts = btn('정지 해제', 'btn-p', 'unsuspend', r.id) + btn('📱 번호', 'btn-g', 'phones', r.id);
     return '<div class="zg-row"><div class="zg-main">' + nameHtml(r) +
       '<div class="zg-meta">📞 ' + esc(fmtPhone(r.phone)) + ' · 가입 ' + esc(fmtDate(r.createdAt)) +
-      ' · 만료 ' + esc(expYmd(r) || '—') + '</div></div><div class="zg-acts">' + acts + '</div></div>';
+      ' · 만료 ' + esc(expYmd(r) || '—') + '</div>' +
+      (r.vehicleMemo ? '<div class="zg-meta" style="font-family:inherit">🚚 ' + esc(r.vehicleMemo) + '</div>' : '') +
+      '</div><div class="zg-acts">' + acts + '</div></div>';
   }
   function phoneRow(r) {
     return '<div class="zg-row"><div class="zg-main">' + nameHtml(r) +
@@ -430,6 +453,11 @@
       .reduce(function (a, p) { return a + p.amount; }, 0);
   }
   function unavailableHtml() {
+    if (state.payState === 'error') {
+      return '<div class="zg-empty">결제 기록을 불러오지 못했습니다.<br>' +
+        '<span style="color:var(--red)">' + esc(state.payErr || '서버 오류') + '</span><br>' +
+        '<span style="font-size:11px">서버는 응답했지만 DB 처리에 실패했습니다. Supabase(jabgo)에서 zapgo_payments.sql 을 실행했는지 확인한 뒤 새로고침하세요.</span></div>';
+    }
     return '<div class="zg-empty">결제 기록 API가 서버에 아직 없습니다.<br>서버 업데이트(결제 API 설치) 후 새로고침하면 표시됩니다.</div>';
   }
   function monthsWithData() {
@@ -547,7 +575,7 @@
   }
   function amountFieldHtml() {
     if (state.payState !== 'ok') {
-      return '<div class="zg-note">결제 기록 API가 서버에 없어 금액은 기록되지 않습니다.</div>';
+      return '<div class="zg-note">결제 기록을 사용할 수 없어 금액은 기록되지 않습니다. (' + (state.payState === 'error' ? '서버 오류: ' + esc(state.payErr) : 'API 없음') + ')</div>';
     }
     return '<div class="fg"><label class="fl">결제 금액 (원) <span style="font-weight:400;color:var(--text3)">— 입금 확인한 금액. 비우면 결제 기록을 남기지 않습니다(무료/테스트)</span></label>' +
       '<input class="fi2" id="zg-d-amt" inputmode="numeric" placeholder="예) 50000" value="' + esc(dlg.amount || '') + '" oninput="ZG.fmtAmt(this)"></div>';
@@ -555,6 +583,7 @@
   function drawDialog() {
     if (!dlg) return;
     if (dlg.kind === 'manual') { drawPayDialog(); return; }
+    if (dlg.kind === 'add') { drawAddDialog(); return; }
     var isApprove = dlg.kind === 'approve';
     var m = dialogEl();
     m.innerHTML =
@@ -572,6 +601,31 @@
       '<div style="display:flex;gap:8px;margin-top:8px;justify-content:flex-end">' +
       '<button class="btn btn-g" onclick="ZG.dlgClose()">취소</button>' +
       '<button class="btn btn-p" id="zg-d-ok" onclick="ZG.dlgSubmit()">' + (isApprove ? '승인' : '연장') + '</button></div></div>';
+    m.classList.add('open');
+  }
+
+  // 회원 추가 (관리자가 직접 만든다 — 즉시 승인 + 이용기간 설정)
+  function drawAddDialog() {
+    var m = dialogEl();
+    m.innerHTML =
+      '<div class="modal-box" style="max-width:460px">' +
+      '<div class="mh"><div class="mt">➕ 회원 추가</div><button class="mc" onclick="ZG.dlgClose()">×</button></div>' +
+      '<div class="zg-note">관리자가 직접 만드는 회원입니다. 저장하면 바로 승인되어 아래 기간 동안 이용할 수 있습니다.</div>' +
+      '<div class="fg"><label class="fl">이름</label><input class="fi2" id="zg-a-name" maxlength="30" autocomplete="off"></div>' +
+      '<div class="fg"><label class="fl">아이디 <span style="font-weight:400;color:var(--text3)">— 영문·숫자·밑줄(_) 3~30자</span></label>' +
+      '<input class="fi2" id="zg-a-user" maxlength="30" autocomplete="off" autocapitalize="none" spellcheck="false"></div>' +
+      '<div class="fg"><label class="fl">비밀번호 <span style="font-weight:400;color:var(--text3)">— 4자 이상</span></label>' +
+      '<input class="fi2" id="zg-a-pw" type="password" maxlength="100" autocomplete="new-password"></div>' +
+      '<div class="fg"><label class="fl">사용하는 휴대폰 번호</label><input class="fi2" id="zg-a-phone" inputmode="numeric" placeholder="010-0000-0000" autocomplete="off" oninput="ZG.fmtPhoneInput(this)"></div>' +
+      '<div class="fg"><label class="fl">차량 메모 <span style="font-weight:400;color:var(--text3)">— 선택 (예: 1톤 카고 12가3456)</span></label><input class="fi2" id="zg-a-memo" maxlength="100" autocomplete="off"></div>' +
+      '<div class="fg"><label class="fl">이용 시작일</label><input class="fi2" type="date" id="zg-d-start" value="' + esc(dlg.start) + '"></div>' +
+      '<div class="fg"><label class="fl">이용 종료일</label><input class="fi2" type="date" id="zg-d-end" value="' + esc(dlg.end) + '"></div>' +
+      presetsHtml() +
+      amountFieldHtml() +
+      '<div class="zg-err" id="zg-d-err">' + esc(dlg.err || '') + '</div>' +
+      '<div style="display:flex;gap:8px;margin-top:8px;justify-content:flex-end">' +
+      '<button class="btn btn-g" onclick="ZG.dlgClose()">취소</button>' +
+      '<button class="btn btn-p" id="zg-d-ok" onclick="ZG.addSubmit()">회원 추가</button></div></div>';
     m.classList.add('open');
   }
 
@@ -769,7 +823,7 @@
   ZG.preset = function (n) {
     if (!dlg) return;
     var base;
-    if (dlg.kind === 'approve') {
+    if (dlg.kind === 'approve' || dlg.kind === 'add') {
       var s = (document.getElementById('zg-d-start') || {}).value;
       base = DATE_RE.test(s || '') ? s : todayKST();
     } else base = dlg.base;
@@ -784,6 +838,65 @@
     el.value = n ? n.toLocaleString('ko-KR') : '';
   };
   ZG.setPayMonth = function (m) { state.payMonth = m || ''; drawRows(); };
+
+  // 휴대폰 입력 시 010-0000-0000 형태로 자동 하이픈
+  ZG.fmtPhoneInput = function (el) { el.value = fmtPhone(el.value.slice(0, 13)); };
+
+  ZG.addMember = function () {
+    if (!state.memberApi) {
+      toast('서버에 회원 추가 기능이 아직 없습니다. 서버 업데이트가 필요합니다.', 'error');
+      return;
+    }
+    var t = todayKST();
+    dlg = { kind: 'add', start: t, end: addDays(t, 30), err: '' };
+    drawDialog();
+  };
+
+  ZG.addSubmit = function () {
+    if (!dlg || dlg.kind !== 'add') return;
+    var errEl = document.getElementById('zg-d-err');
+    function fail(msg) { dlg.err = msg; if (errEl) errEl.textContent = msg; }
+    function val(id) { return ((document.getElementById(id) || {}).value || ''); }
+    var name = val('zg-a-name').trim(), username = val('zg-a-user').trim(), password = val('zg-a-pw');
+    var phone = digits(val('zg-a-phone')), memo = val('zg-a-memo').trim();
+    var start = val('zg-d-start'), end = val('zg-d-end');
+    var amtEl = document.getElementById('zg-d-amt');
+    var amount = amtEl ? parseAmount(amtEl.value) : 0;
+    if (!name) return fail('이름을 입력해 주세요.');
+    if (!/^[a-zA-Z0-9_]{3,30}$/.test(username)) return fail('아이디는 영문·숫자·밑줄(_) 3~30자로 입력해 주세요.');
+    if (password.length < 4) return fail('비밀번호는 4자 이상 입력해 주세요.');
+    if (!PHONE_RE.test(phone)) return fail('휴대폰 번호 형식이 올바르지 않습니다.');
+    if (!DATE_RE.test(start) || !DATE_RE.test(end)) return fail('이용 기간을 정확히 입력해 주세요.');
+    if (end < start) return fail('종료일이 시작일보다 빠릅니다.');
+    if (end < todayKST()) return fail('종료일이 오늘보다 과거입니다.');
+    if (amtEl && amtEl.value.trim() && (amount < 1 || amount > 10000000)) return fail('금액은 1원 이상 10,000,000원 이하로 입력해 주세요.');
+    var days = dayDiff(start, end) + 1;
+    var okBtn = document.getElementById('zg-d-ok');
+    if (okBtn) okBtn.disabled = true;
+    api('POST', '/admin/members', { name: name, username: username, password: password, phone: phone, vehicleMemo: memo, startDate: start, endDate: end })
+      .then(function (created) {
+        // 비밀번호는 여기서 즉시 지운다 (화면·저장소 어디에도 남기지 않음)
+        var pwEl = document.getElementById('zg-a-pw'); if (pwEl) pwEl.value = '';
+        if (!(amount > 0)) return null;
+        return api('POST', '/admin/users/' + encodeURIComponent(created.id) + '/payments', {
+          amount: amount, days: days > 0 ? days : undefined, kind: 'approve', note: '회원 추가'
+        }).then(function () { return null; }, function (pe) { return pe || new Error('결제 기록 실패'); });
+      })
+      .then(function (payErr) {
+        toast(name + ' 님이 추가되었습니다', 'success');
+        if (payErr) {
+          window.alert('⚠️ ' + name + ' 님의 회원 추가는 완료됐지만 결제 기록(' + won(amount) + ')을 저장하지 못했습니다.\n' +
+            '"결제 내역 → 결제 직접 추가"에서 같은 금액을 기록해 주세요.\n\n사유: ' + ((payErr && payErr.message) || '알 수 없음'));
+        }
+        closeDialog();
+        loadAll();
+      })
+      .catch(function (e) {
+        if (e && e.status === 401) { handleErr(e); return; }
+        if (okBtn) okBtn.disabled = false;
+        fail((e && e.message) || '회원을 추가하지 못했습니다');
+      });
+  };
   ZG.goMonth = function (m) { state.tab = 'payments'; state.q = ''; state.payMonth = m; drawContent(); };
 
   ZG.payAdd = function () {
