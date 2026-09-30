@@ -6,8 +6,8 @@
  *    닫으면 사라지는 sessionStorage 에만 보관. 비밀번호는 어디에도 저장하지 않는다.
  *  - 어드민 로그인 시 같은 비밀번호면 자동 연결(ZG.autoLogin), 다르면 직접 로그인.
  *
- *  탭: 대시보드 / 회원 관리 / 이용권 관리 / 멀티 번호
- *  (결제 관리·매출은 서버에 금액 정보가 생긴 뒤 추가)
+ *  탭: 대시보드 / 회원 관리 / 이용권 관리 / 결제 내역 / 매출 현황 / 멀티 번호
+ *  결제 금액은 관리자가 승인·연장 때 직접 입력한다(비우면 기록하지 않음). 과거 결제는 '직접 추가'.
  *
  *  index.html 연결(5곳): 메뉴 항목 / navigate 표(zapgo) / 이 스크립트 태그 /
  *                        doLogin 의 autoLogin 호출 / doLogout 의 clearSession 호출
@@ -31,10 +31,16 @@
     ['dash', '📊 대시보드'],
     ['members', '👥 회원 관리'],
     ['license', '🎫 이용권 관리'],
+    ['payments', '💳 결제 내역'],
+    ['revenue', '💰 매출 현황'],
     ['phones', '📱 멀티 번호']
   ];
+  var KIND = { approve: '가입 승인', extend: '기간 연장', manual: '직접 입력' };
 
-  var state = { all: [], loaded: false, tab: 'dash', q: '', status: '', lic: 'soon' };
+  var state = {
+    all: [], loaded: false, tab: 'dash', q: '', status: '', lic: 'soon',
+    pay: [], payState: 'idle', payMonth: '' // payState: idle | ok | unavailable
+  };
   var edit = null; // 번호 편집 모달 상태
   var dlg = null;  // 승인/연장 다이얼로그 상태
 
@@ -58,6 +64,14 @@
     try { return d.toLocaleDateString('sv-SE', { timeZone: 'Asia/Seoul' }); } catch (e) { return String(iso).slice(0, 10); }
   }
   function todayKST() { return fmtDate(new Date().toISOString()); }
+  function won(n) { return '₩' + Number(n || 0).toLocaleString('ko-KR'); }
+  function monthOf(iso) { var v = fmtDate(iso); return v === '—' ? '' : v.slice(0, 7); }
+  function addMonths(ym, n) {
+    var y = parseInt(ym.slice(0, 4), 10), m = parseInt(ym.slice(5, 7), 10) - 1 + n;
+    y += Math.floor(m / 12); m = ((m % 12) + 12) % 12;
+    return y + '-' + String(m + 1).padStart(2, '0');
+  }
+  function parseAmount(v) { var d = digits(v); return d ? parseInt(d, 10) : 0; }
   function addDays(ymd, n) {
     var d = new Date(ymd + 'T00:00:00Z');
     d.setUTCDate(d.getUTCDate() + n);
@@ -105,6 +119,10 @@
     } catch (e) { /* 무시 */ }
   }
   function clearLink() { try { localStorage.removeItem(LINK_KEY); } catch (e) { /* 무시 */ } }
+  // 이 화면은 개발자 전용이다. 어드민의 역할 값은 화면용이라 서버가 막아 주지 않으므로 여기서도 검사한다.
+  // 실제 로그인한 역할(realRole)만 본다 — "총판 시점으로 보기" 같은 미리보기 전환(role)은 영향 없음.
+  // 값이 없거나 dev 가 아니면 열지 않는다(fail closed).
+  function isDev() { return window.realRole === 'dev'; }
   function root() { return document.getElementById('zg-root'); }
   function byId(id) { return state.all.filter(function (x) { return x.id === id; })[0]; }
 
@@ -184,7 +202,16 @@
       '.zg-err{color:var(--red);font-size:12px;margin-top:8px;min-height:16px}' +
       '.zg-empty{padding:26px;text-align:center;color:var(--text3);font-size:12px}' +
       '.zg-note{font-size:11px;color:var(--text3);line-height:1.6;margin:8px 0}' +
-      '.zg-presets{display:flex;gap:6px;flex-wrap:wrap;margin:4px 0 8px}';
+      '.zg-presets{display:flex;gap:6px;flex-wrap:wrap;margin:4px 0 8px}' +
+      '.zg-bars{display:flex;flex-direction:column;gap:6px}' +
+      '.zg-bar-r{display:grid;grid-template-columns:64px 1fr 110px 44px;gap:8px;align-items:center;font-size:12px;cursor:pointer}' +
+      '.zg-bar-r .t{height:14px;background:var(--bg4);border-radius:7px;overflow:hidden}' +
+      '.zg-bar-r .t i{display:block;height:100%;background:var(--accent);border-radius:7px}' +
+      '.zg-bar-r .v{text-align:right;font-family:monospace}' +
+      '.zg-bar-r .n{text-align:right;color:var(--text3);font-size:11px}' +
+      '.zg-row.void{opacity:.5}.zg-row.void .zg-name{text-decoration:line-through}' +
+      '.zg-amt{font-family:monospace;font-weight:700;font-size:14px}' +
+      '.zg-sum{display:flex;justify-content:space-between;padding:10px 13px;border-top:1px solid var(--border);font-size:12px;margin-top:6px}';
     document.head.appendChild(st);
   }
 
@@ -229,11 +256,22 @@
     }).join('');
   }
 
+  function loadPayments() {
+    return api('GET', '/admin/payments')
+      .then(function (list) { state.pay = Array.isArray(list) ? list : []; state.payState = 'ok'; })
+      .catch(function (e) {
+        if (e && e.status === 401) throw e;
+        state.pay = [];
+        state.payState = 'unavailable'; // 서버에 결제 API 가 아직 없음(404) 등
+      });
+  }
+
   function loadAll() {
     if (!getToken()) { drawLogin(); return; }
     if (!document.getElementById('zg-content')) drawShell();
-    api('GET', '/admin/users')
-      .then(function (list) {
+    Promise.all([api('GET', '/admin/users'), loadPayments()])
+      .then(function (r) {
+        var list = r[0];
         state.all = Array.isArray(list) ? list : [];
         state.loaded = true;
         drawContent();
@@ -251,6 +289,8 @@
     drawTabs();
     if (!state.loaded) { box.innerHTML = '<div class="zg-empty">불러오는 중…</div>'; return; }
     if (state.tab === 'dash') { box.innerHTML = dashHtml(); return; }
+    if (state.tab === 'revenue') { box.innerHTML = revenueHtml(); return; }
+    if (state.tab === 'payments') { box.innerHTML = paymentsBarHtml() + '<div id="zg-rows"></div>'; drawRows(); return; }
     if (state.tab === 'license') {
       box.innerHTML = licenseBarHtml() + '<div id="zg-rows"></div>';
     } else {
@@ -298,12 +338,13 @@
       stat('승인 대기', c.pending, c.pending ? 'warn' : '', 'members:pending') +
       stat('정지', c.suspended, '', 'members:suspended') +
       stat('3일 내 만료', c.soon3, c.soon3 ? 'warn' : '', 'license:3') +
-      stat('만료됨', c.expired, c.expired ? 'bad' : '', 'license:expired') + '</div>' +
+      stat('만료됨', c.expired, c.expired ? 'bad' : '', 'license:expired') +
+      (state.payState === 'ok' ? stat('이번 달 매출', won(monthTotal(monthOf(new Date().toISOString()))), 'good', 'revenue:') : '') + '</div>' +
       '<div class="zg-sec">승인 대기 (' + c.pending + ')</div>' +
       (pend.length ? pend.map(function (r) { return miniRow(r, 'pending'); }).join('') : '<div class="zg-empty">대기 중인 가입 요청이 없습니다</div>') +
       '<div class="zg-sec">만료 임박 · 7일 이내 (' + c.soon7 + ')</div>' +
       (soon.length ? soon.map(function (r) { return miniRow(r, 'soon'); }).join('') : '<div class="zg-empty">7일 이내 만료되는 회원이 없습니다</div>') +
-      '<div class="zg-note">결제 관리와 매출은 서버에 결제 금액 정보가 생긴 뒤 추가됩니다.</div>';
+      (state.payState === 'unavailable' ? '<div class="zg-note">결제 기록 API가 서버에 아직 없어 매출이 표시되지 않습니다. (서버 업데이트 필요)</div>' : '');
   }
 
   // ---------- 탭: 회원 관리 / 멀티 번호 ----------
@@ -382,10 +423,99 @@
       '<div class="zg-acts">' + btn('기간 연장', 'btn-p', 'extend', r.id) + '</div></div>';
   }
 
+  // ---------- 탭: 결제 내역 / 매출 현황 ----------
+  function validPay() { return state.pay.filter(function (p) { return !p.voidedAt; }); }
+  function monthTotal(ym) {
+    return validPay().filter(function (p) { return monthOf(p.paidAt) === ym; })
+      .reduce(function (a, p) { return a + p.amount; }, 0);
+  }
+  function unavailableHtml() {
+    return '<div class="zg-empty">결제 기록 API가 서버에 아직 없습니다.<br>서버 업데이트(결제 API 설치) 후 새로고침하면 표시됩니다.</div>';
+  }
+  function monthsWithData() {
+    var seen = {};
+    state.pay.forEach(function (p) { var m = monthOf(p.paidAt); if (m) seen[m] = 1; });
+    return Object.keys(seen).sort().reverse();
+  }
+  function paymentsBarHtml() {
+    if (state.payState !== 'ok') return unavailableHtml();
+    var opts = '<option value="">전체 기간</option>' + monthsWithData().map(function (m) {
+      return '<option value="' + m + '"' + (state.payMonth === m ? ' selected' : '') + '>' + m + '</option>';
+    }).join('');
+    return '<div class="zg-bar">' +
+      '<input id="zg-q" placeholder="이름 / 아이디 / 메모 검색" value="' + esc(state.q) + '" oninput="ZG.setQ(this.value)">' +
+      '<select onchange="ZG.setPayMonth(this.value)">' + opts + '</select>' +
+      '<button class="btn btn-p btn-sm" onclick="ZG.payAdd()">＋ 결제 직접 추가</button></div>' +
+      '<div class="zg-sub">승인·연장 때 입력한 결제가 자동으로 쌓입니다. 잘못 입력한 결제는 삭제하지 않고 <b>무효</b> 처리하며, 무효는 매출 합계에서 제외됩니다.</div>';
+  }
+  function payRow(p) {
+    var void_ = !!p.voidedAt;
+    return '<div class="zg-row' + (void_ ? ' void' : '') + '"><div class="zg-main"><div class="zg-name">' + esc(p.riderName || '(이름 없음)') +
+      (p.riderUsername ? ' <span style="font-weight:400;color:var(--text3)">@' + esc(p.riderUsername) + '</span>' : '') +
+      '<span class="zg-pill ' + (void_ ? 'stop' : 'ok') + '">' + (void_ ? '무효' : esc(KIND[p.kind] || p.kind)) + '</span></div>' +
+      '<div class="zg-meta">' + esc(fmtDate(p.paidAt)) + (p.days ? ' · ' + p.days + '일' : '') +
+      (p.note ? ' · ' + esc(p.note) : '') + (void_ && p.voidReason ? ' · 무효 사유: ' + esc(p.voidReason) : '') + '</div></div>' +
+      '<div class="zg-acts"><span class="zg-amt">' + won(p.amount) + '</span>' +
+      (void_ ? '' : '<button class="btn btn-d btn-sm" data-id="' + esc(p.id) + '" onclick="ZG.payVoid(this.dataset.id)">무효</button>') + '</div></div>';
+  }
+  function payList() {
+    var q = state.q.trim().toLowerCase();
+    return state.pay.filter(function (p) {
+      if (state.payMonth && monthOf(p.paidAt) !== state.payMonth) return false;
+      if (!q) return true;
+      return String(p.riderName || '').toLowerCase().indexOf(q) >= 0 ||
+        String(p.riderUsername || '').toLowerCase().indexOf(q) >= 0 ||
+        String(p.note || '').toLowerCase().indexOf(q) >= 0;
+    });
+  }
+  function revenueHtml() {
+    if (state.payState !== 'ok') return unavailableHtml();
+    var now = monthOf(new Date().toISOString());
+    var thisM = monthTotal(now), lastM = monthTotal(addMonths(now, -1));
+    var valid = validPay();
+    var thisCnt = valid.filter(function (p) { return monthOf(p.paidAt) === now; }).length;
+    var total = valid.reduce(function (a, p) { return a + p.amount; }, 0);
+    var year = valid.filter(function (p) { return monthOf(p.paidAt).slice(0, 4) === now.slice(0, 4); })
+      .reduce(function (a, p) { return a + p.amount; }, 0);
+    var diff = lastM ? Math.round((thisM - lastM) / lastM * 100) : null;
+    var months = [], i;
+    for (i = 11; i >= 0; i--) months.push(addMonths(now, -i));
+    var vals = months.map(function (m) {
+      var arr = valid.filter(function (p) { return monthOf(p.paidAt) === m; });
+      return { m: m, sum: arr.reduce(function (a, p) { return a + p.amount; }, 0), n: arr.length };
+    });
+    var max = Math.max.apply(null, vals.map(function (v) { return v.sum; }).concat([1]));
+    function card(l, v, cls, sub) {
+      return '<div class="zg-stat ' + cls + '" style="cursor:default"><div class="l">' + l + '</div><b>' + v + '</b>' +
+        (sub ? '<div class="l" style="margin-top:4px">' + sub + '</div>' : '') + '</div>';
+    }
+    return '<div class="zg-cards">' +
+      card('이번 달 매출', won(thisM), 'good', thisCnt + '건' + (diff === null ? '' : ' · 지난달 대비 ' + (diff >= 0 ? '+' : '') + diff + '%')) +
+      card('지난달 매출', won(lastM), '', '') +
+      card(now.slice(0, 4) + '년 누적', won(year), '', '') +
+      card('전체 누적', won(total), '', valid.length + '건') +
+      card('건당 평균', won(valid.length ? Math.round(total / valid.length) : 0), '', '') + '</div>' +
+      '<div class="zg-sec">월별 매출 (최근 12개월) — 막대를 누르면 그 달 결제 내역</div>' +
+      '<div class="zg-bars">' + vals.map(function (v) {
+        return '<div class="zg-bar-r" data-m="' + v.m + '" onclick="ZG.goMonth(this.dataset.m)"><span>' + v.m.slice(2) + '</span>' +
+          '<div class="t"><i style="width:' + Math.round(v.sum / max * 100) + '%"></i></div>' +
+          '<span class="v">' + won(v.sum) + '</span><span class="n">' + v.n + '건</span></div>';
+      }).join('') + '</div>' +
+      '<div class="zg-note">무효 처리된 결제는 제외한 금액입니다. 과거 결제가 빠져 있으면 "결제 내역 → 결제 직접 추가"로 기록하세요.</div>';
+  }
+
   function drawRows() {
     var box = document.getElementById('zg-rows');
     if (!box) return;
     var list, fn;
+    if (state.tab === 'payments') {
+      list = payList();
+      box.innerHTML = list.length
+        ? list.map(payRow).join('') + '<div class="zg-sum"><span>합계 (무효 제외, ' + list.filter(function (p) { return !p.voidedAt; }).length + '건)</span><b class="zg-amt">' +
+          won(list.filter(function (p) { return !p.voidedAt; }).reduce(function (a, p) { return a + p.amount; }, 0)) + '</b></div>'
+        : '<div class="zg-empty">결제 내역이 없습니다</div>';
+      return;
+    }
     if (state.tab === 'license') { list = licenseList(); fn = licenseRow; }
     else {
       list = state.all.filter(function (r) { return (!state.status || r.status === state.status) && matchQ(r); });
@@ -415,8 +545,16 @@
       return '<button class="btn btn-g btn-sm" onclick="ZG.preset(' + n + ')">+' + n + '일</button>';
     }).join('') + '</div>';
   }
+  function amountFieldHtml() {
+    if (state.payState !== 'ok') {
+      return '<div class="zg-note">결제 기록 API가 서버에 없어 금액은 기록되지 않습니다.</div>';
+    }
+    return '<div class="fg"><label class="fl">결제 금액 (원) <span style="font-weight:400;color:var(--text3)">— 입금 확인한 금액. 비우면 결제 기록을 남기지 않습니다(무료/테스트)</span></label>' +
+      '<input class="fi2" id="zg-d-amt" inputmode="numeric" placeholder="예) 50000" value="' + esc(dlg.amount || '') + '" oninput="ZG.fmtAmt(this)"></div>';
+  }
   function drawDialog() {
     if (!dlg) return;
+    if (dlg.kind === 'manual') { drawPayDialog(); return; }
     var isApprove = dlg.kind === 'approve';
     var m = dialogEl();
     m.innerHTML =
@@ -429,10 +567,33 @@
         : '<div class="zg-note">현재 만료일: <b>' + esc(dlg.current || '—') + '</b> · 연장 기준일(현재 만료일과 오늘 중 늦은 날): <b>' + esc(dlg.base) + '</b></div>') +
       '<div class="fg"><label class="fl">' + (isApprove ? '종료일' : '새 만료일') + '</label><input class="fi2" type="date" id="zg-d-end" value="' + esc(dlg.end) + '"></div>' +
       presetsHtml() +
+      amountFieldHtml() +
       '<div class="zg-err" id="zg-d-err">' + esc(dlg.err || '') + '</div>' +
       '<div style="display:flex;gap:8px;margin-top:8px;justify-content:flex-end">' +
       '<button class="btn btn-g" onclick="ZG.dlgClose()">취소</button>' +
       '<button class="btn btn-p" id="zg-d-ok" onclick="ZG.dlgSubmit()">' + (isApprove ? '승인' : '연장') + '</button></div></div>';
+    m.classList.add('open');
+  }
+
+  // 결제 직접 추가 (과거 결제 보정용)
+  function drawPayDialog() {
+    var m = dialogEl();
+    var riders = state.all.filter(function (r) { return r.status === 'approved' || r.status === 'suspended'; })
+      .sort(function (a, b) { return String(a.name || '').localeCompare(String(b.name || ''), 'ko'); });
+    m.innerHTML =
+      '<div class="modal-box" style="max-width:440px">' +
+      '<div class="mh"><div class="mt">💳 결제 직접 추가</div><button class="mc" onclick="ZG.dlgClose()">×</button></div>' +
+      '<div class="zg-note">이미 처리한 결제를 기록에 추가할 때 씁니다. 회원의 이용기간은 바뀌지 않습니다.</div>' +
+      '<div class="fg"><label class="fl">회원</label><select class="fi2" id="zg-p-rider">' +
+      riders.map(function (r) { return '<option value="' + esc(r.id) + '">' + esc(r.name || '(이름 없음)') + (r.username ? ' @' + esc(r.username) : '') + '</option>'; }).join('') + '</select></div>' +
+      '<div class="fg"><label class="fl">결제 금액 (원)</label><input class="fi2" id="zg-p-amt" inputmode="numeric" placeholder="예) 50000" oninput="ZG.fmtAmt(this)"></div>' +
+      '<div class="fg"><label class="fl">결제일</label><input class="fi2" type="date" id="zg-p-date" value="' + esc(todayKST()) + '"></div>' +
+      '<div class="fg"><label class="fl">이용 일수 (선택)</label><input class="fi2" id="zg-p-days" inputmode="numeric" placeholder="예) 30"></div>' +
+      '<div class="fg"><label class="fl">메모 (선택)</label><input class="fi2" id="zg-p-note" maxlength="100" placeholder="예) 3월 입금 확인"></div>' +
+      '<div class="zg-err" id="zg-d-err">' + esc(dlg.err || '') + '</div>' +
+      '<div style="display:flex;gap:8px;margin-top:8px;justify-content:flex-end">' +
+      '<button class="btn btn-g" onclick="ZG.dlgClose()">취소</button>' +
+      '<button class="btn btn-p" id="zg-d-ok" onclick="ZG.paySubmit()">기록 추가</button></div></div>';
     m.classList.add('open');
   }
 
@@ -537,6 +698,7 @@
   // 잡고 서버에 조용히 로그인한다. 실패하면 아무 표시 없이 넘어가고 잡고 탭에서 직접 로그인하면 된다.
   // 비밀번호는 이 함수 안에서만 쓰이고 어디에도 저장하지 않는다.
   ZG.autoLogin = function (quickId, pw) {
+    if (!isDev()) return;
     var link = getLink();
     if (!link || !quickId || !pw || link.q !== quickId) return;
     api('POST', '/admin/login', { username: link.z, password: pw })
@@ -561,13 +723,15 @@
     state.q = '';
     state.status = '';
     state.lic = 'soon';
+    state.payMonth = '';
     drawContent();
   };
   // 대시보드 카드 클릭: "탭:값"
   ZG.go = function (spec) {
     var p = String(spec).split(':');
     state.q = '';
-    if (p[0] === 'members') { state.tab = 'members'; state.status = p[1] || ''; }
+    if (p[0] === 'revenue') { state.tab = 'revenue'; }
+    else if (p[0] === 'members') { state.tab = 'members'; state.status = p[1] || ''; }
     else if (p[0] === 'license') { state.tab = 'license'; state.lic = p[1] || 'soon'; }
     drawContent();
   };
@@ -613,6 +777,57 @@
     if (end) end.value = addDays(base, n);
   };
   ZG.dlgClose = function () { closeDialog(); };
+
+  // 금액 입력 시 3자리 콤마
+  ZG.fmtAmt = function (el) {
+    var n = parseAmount(el.value);
+    el.value = n ? n.toLocaleString('ko-KR') : '';
+  };
+  ZG.setPayMonth = function (m) { state.payMonth = m || ''; drawRows(); };
+  ZG.goMonth = function (m) { state.tab = 'payments'; state.q = ''; state.payMonth = m; drawContent(); };
+
+  ZG.payAdd = function () {
+    if (!state.all.some(function (r) { return r.status === 'approved' || r.status === 'suspended'; })) {
+      toast('결제를 추가할 회원이 없습니다', 'error');
+      return;
+    }
+    dlg = { kind: 'manual', err: '' };
+    drawDialog();
+  };
+  ZG.paySubmit = function () {
+    if (!dlg || dlg.kind !== 'manual') return;
+    var errEl = document.getElementById('zg-d-err');
+    function fail(msg) { dlg.err = msg; if (errEl) errEl.textContent = msg; }
+    var rider = (document.getElementById('zg-p-rider') || {}).value;
+    var amount = parseAmount((document.getElementById('zg-p-amt') || {}).value);
+    var date = (document.getElementById('zg-p-date') || {}).value || '';
+    var daysRaw = ((document.getElementById('zg-p-days') || {}).value || '').trim();
+    var note = ((document.getElementById('zg-p-note') || {}).value || '').trim();
+    if (!rider) return fail('회원을 선택해 주세요.');
+    if (amount < 1 || amount > 10000000) return fail('금액은 1원 이상 10,000,000원 이하로 입력해 주세요.');
+    if (!DATE_RE.test(date)) return fail('결제일을 정확히 입력해 주세요.');
+    if (date > addDays(todayKST(), 1)) return fail('결제일이 미래입니다.');
+    var days = daysRaw ? parseInt(digits(daysRaw), 10) : undefined;
+    if (daysRaw && (!days || days > 3660)) return fail('이용 일수가 올바르지 않습니다.');
+    var okBtn = document.getElementById('zg-d-ok');
+    if (okBtn) okBtn.disabled = true;
+    api('POST', '/admin/users/' + encodeURIComponent(rider) + '/payments', { amount: amount, days: days, kind: 'manual', note: note, paidAt: date })
+      .then(function () { toast('결제가 기록되었습니다', 'success'); closeDialog(); loadAll(); })
+      .catch(function (e) {
+        if (e && e.status === 401) { handleErr(e); return; }
+        if (okBtn) okBtn.disabled = false;
+        fail((e && e.message) || '기록하지 못했습니다');
+      });
+  };
+  ZG.payVoid = function (id) {
+    var p = state.pay.filter(function (x) { return x.id === id; })[0];
+    if (!p) return;
+    var reason = window.prompt(p.riderName + ' 님 ' + won(p.amount) + ' 결제를 무효 처리합니다.\n(삭제되지 않고 기록은 남으며, 매출 합계에서만 빠집니다)\n\n사유를 입력해 주세요 (비워도 됩니다):');
+    if (reason === null) return;
+    api('POST', '/admin/payments/' + encodeURIComponent(id) + '/void', { reason: reason })
+      .then(function () { toast('무효 처리되었습니다', 'success'); loadAll(); })
+      .catch(handleErr);
+  };
   ZG.dlgSubmit = function () {
     if (!dlg) return;
     var errEl = document.getElementById('zg-d-err');
@@ -631,12 +846,28 @@
       body = { endDate: end };
       path = '/admin/users/' + encodeURIComponent(dlg.id) + '/extend';
     }
+    var amtEl = document.getElementById('zg-d-amt');
+    var amount = amtEl ? parseAmount(amtEl.value) : 0;
+    if (amtEl && amtEl.value.trim() && (amount < 1 || amount > 10000000)) return fail('금액은 1원 이상 10,000,000원 이하로 입력해 주세요.');
+    var days = dlg.kind === 'approve' ? dayDiff(body.startDate, body.endDate) + 1 : dayDiff(dlg.base, body.endDate);
+    var riderId = dlg.id, riderName = dlg.name;
     var okBtn = document.getElementById('zg-d-ok');
     if (okBtn) okBtn.disabled = true;
     var kind = dlg.kind;
     api('POST', path, body)
       .then(function () {
+        if (!(amount > 0)) return null;
+        // 이용기간 처리는 이미 끝났다. 결제 기록만 실패할 수 있으므로 따로 처리한다.
+        return api('POST', '/admin/users/' + encodeURIComponent(riderId) + '/payments', {
+          amount: amount, days: days > 0 ? days : undefined, kind: kind
+        }).then(function () { return null; }, function (pe) { return pe || new Error('결제 기록 실패'); });
+      })
+      .then(function (payErr) {
         toast(kind === 'approve' ? '승인되었습니다' : '연장되었습니다', 'success');
+        if (payErr) {
+          window.alert('⚠️ ' + riderName + ' 님의 ' + (kind === 'approve' ? '승인' : '연장') + '은 완료됐지만 결제 기록(' + won(amount) + ')을 저장하지 못했습니다.\n' +
+            '"결제 내역 → 결제 직접 추가"에서 같은 금액을 기록해 주세요.\n\n사유: ' + ((payErr && payErr.message) || '알 수 없음'));
+        }
         closeDialog();
         loadAll();
       })
@@ -751,6 +982,10 @@
 
   // ---------- navigate() 가 호출하는 진입점 ----------
   window.renderZapgo = function () {
+    if (!isDev()) {
+      setToken(null);
+      return '<div class="empty"><div class="empty-icon">🔒</div><div class="empty-txt">개발자 계정만 사용할 수 있는 메뉴입니다</div></div>';
+    }
     injectStyle();
     setTimeout(function () {
       if (!root()) return;
