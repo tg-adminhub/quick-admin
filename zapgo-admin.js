@@ -6,7 +6,7 @@
  *    닫으면 사라지는 sessionStorage 에만 보관. 비밀번호는 어디에도 저장하지 않는다.
  *  - 어드민 로그인 시 같은 비밀번호면 자동 연결(ZG.autoLogin), 다르면 직접 로그인.
  *
- *  탭: 대시보드 / 회원 관리(회원 추가·승인·연장 등) / 이용권 관리 / 결제 내역 / 매출 현황 / 멀티 번호
+ *  탭: 대시보드 / 회원 관리(추가·승인·연장·정지·삭제) / 이용권 관리 / 결제 내역 / 매출 현황 / 멀티 번호
  *  결제 금액은 관리자가 승인·연장 때 직접 입력한다(비우면 기록하지 않음). 과거 결제는 '직접 추가'.
  *
  *  index.html 연결(5곳): 메뉴 항목 / navigate 표(zapgo) / 이 스크립트 태그 /
@@ -371,7 +371,8 @@
   function memberBarHtml() {
     return '<div class="zg-bar">' +
       '<input id="zg-q" placeholder="이름 / 아이디 / 번호 검색" value="' + esc(state.q) + '" oninput="ZG.setQ(this.value)">' +
-      (state.tab === 'members' ? '<button class="btn btn-p btn-sm" onclick="ZG.addMember()">＋ 회원 추가</button>' : '') +
+      (state.tab === 'members' ? '<button class="btn btn-p btn-sm" onclick="ZG.addMember()">＋ 회원 추가</button>' +
+        '<button class="btn btn-g btn-sm" onclick="ZG.showDeleted()">🗑 삭제 기록</button>' : '') +
       '<select id="zg-status" onchange="ZG.setStatus(this.value)">' +
       ['', 'approved', 'pending', 'suspended', 'rejected'].map(function (v) {
         var label = v ? STATUS[v][0] : '전체 상태';
@@ -403,6 +404,7 @@
     if (r.status === 'pending') acts = btn('승인', 'btn-p', 'approve', r.id) + btn('거절', 'btn-d', 'reject', r.id);
     else if (r.status === 'approved') acts = btn('기간 연장', 'btn-p', 'extend', r.id) + btn('정지', 'btn-d', 'suspend', r.id) + btn('📱 번호', 'btn-g', 'phones', r.id);
     else if (r.status === 'suspended') acts = btn('정지 해제', 'btn-p', 'unsuspend', r.id) + btn('📱 번호', 'btn-g', 'phones', r.id);
+    acts += btn('🗑 삭제', 'btn-g', 'delete', r.id);
     return '<div class="zg-row"><div class="zg-main">' + nameHtml(r) +
       '<div class="zg-meta">📞 ' + esc(fmtPhone(r.phone)) + ' · 가입 ' + esc(fmtDate(r.createdAt)) +
       ' · 만료 ' + esc(expYmd(r) || '—') + '</div>' +
@@ -584,6 +586,8 @@
     if (!dlg) return;
     if (dlg.kind === 'manual') { drawPayDialog(); return; }
     if (dlg.kind === 'add') { drawAddDialog(); return; }
+    if (dlg.kind === 'delete') { drawDeleteDialog(); return; }
+    if (dlg.kind === 'deleted') { drawDeletedDialog(); return; }
     var isApprove = dlg.kind === 'approve';
     var m = dialogEl();
     m.innerHTML =
@@ -601,6 +605,57 @@
       '<div style="display:flex;gap:8px;margin-top:8px;justify-content:flex-end">' +
       '<button class="btn btn-g" onclick="ZG.dlgClose()">취소</button>' +
       '<button class="btn btn-p" id="zg-d-ok" onclick="ZG.dlgSubmit()">' + (isApprove ? '승인' : '연장') + '</button></div></div>';
+    m.classList.add('open');
+  }
+
+  // 회원 삭제 — 되돌릴 수 없으므로 이름을 그대로 다시 입력해야 삭제 버튼이 켜진다
+  function drawDeleteDialog() {
+    var m = dialogEl();
+    var active = dlg.status === 'approved' && (dday({ membershipExpiresAt: dlg.expires }) === null || dday({ membershipExpiresAt: dlg.expires }) >= 0);
+    var extra = dlg.extraCount === null ? '추가 번호가 있으면 함께 삭제됩니다.' : (dlg.extraCount > 0 ? '추가 번호 <b>' + dlg.extraCount + '개</b>도 함께 삭제됩니다.' : '추가 번호는 없습니다.');
+    m.innerHTML =
+      '<div class="modal-box" style="max-width:440px">' +
+      '<div class="mh"><div class="mt" style="color:var(--red)">🗑 회원 삭제 — ' + esc(dlg.name) + '</div><button class="mc" onclick="ZG.dlgClose()">×</button></div>' +
+      (active ? '<div class="zg-note" style="color:var(--red);font-weight:700">⚠ 지금 이용 중인 회원입니다. 삭제하면 로그인과 접속이 곧 끊깁니다.</div>' : '') +
+      '<div class="zg-note">' +
+      '• 삭제하면 <b>되돌릴 수 없습니다.</b> 이 회원은 다시 로그인할 수 없습니다.<br>' +
+      '• ' + extra + '<br>' +
+      '• 이 회원의 <b>연장 요청</b>도 함께 삭제됩니다.<br>' +
+      '• <b>결제 기록(매출)은 지워지지 않고</b> 이름과 함께 남습니다.<br>' +
+      '• 이름·아이디·번호·차량 메모는 <b>삭제 기록</b>에 보관됩니다(비밀번호는 보관하지 않음).<br>' +
+      '• 잠시 쓰지 않게만 하려면 삭제 대신 <b>정지</b>를 쓰세요.</div>' +
+      '<div class="fg"><label class="fl">삭제 사유 <span style="font-weight:400;color:var(--text3)">— 선택</span></label>' +
+      '<input class="fi2" id="zg-x-reason" maxlength="100" autocomplete="off" placeholder="예) 본인 요청으로 탈퇴"></div>' +
+      '<div class="fg"><label class="fl">확인을 위해 회원 이름을 그대로 입력하세요: <b style="color:var(--text)">' + esc(dlg.name) + '</b></label>' +
+      '<input class="fi2" id="zg-x-name" autocomplete="off" oninput="ZG.delCheck()"></div>' +
+      '<div class="zg-err" id="zg-d-err">' + esc(dlg.err || '') + '</div>' +
+      '<div style="display:flex;gap:8px;margin-top:8px;justify-content:flex-end">' +
+      '<button class="btn btn-g" onclick="ZG.dlgClose()">취소</button>' +
+      '<button class="btn btn-d" id="zg-d-ok" disabled onclick="ZG.delSubmit()">삭제</button></div></div>';
+    m.classList.add('open');
+  }
+
+  // 삭제 기록 보기 (복구 정보 확인용)
+  function drawDeletedDialog() {
+    var m = dialogEl();
+    var body;
+    if (dlg.loading) body = '<div class="zg-empty">불러오는 중…</div>';
+    else if (dlg.error) body = '<div class="zg-empty" style="color:var(--red)">' + esc(dlg.error) + '</div>';
+    else if (!dlg.rows.length) body = '<div class="zg-empty">삭제 기록이 없습니다</div>';
+    else body = dlg.rows.map(function (w) {
+      var ex = (w.extraPhones || []).map(function (x) { return fmtPhone(x.phone) + (x.label ? '(' + esc(x.label) + ')' : ''); }).join(', ');
+      return '<div class="zg-row"><div class="zg-main"><div class="zg-name">' + esc(w.name || '(이름 없음)') +
+        (w.username ? ' <span style="font-weight:400;color:var(--text3)">@' + esc(w.username) + '</span>' : '') + '</div>' +
+        '<div class="zg-meta">📞 ' + esc(fmtPhone(w.phone)) + (ex ? ' · 추가 ' + ex : '') + '</div>' +
+        (w.vehicleMemo ? '<div class="zg-meta" style="font-family:inherit">🚚 ' + esc(w.vehicleMemo) + '</div>' : '') +
+        '<div class="zg-meta">삭제 ' + esc(fmtDate(w.deletedAt)) + (w.reason ? ' · 사유: ' + esc(w.reason) : '') + '</div></div></div>';
+    }).join('');
+    m.innerHTML =
+      '<div class="modal-box" style="max-width:540px">' +
+      '<div class="mh"><div class="mt">🗑 삭제 기록</div><button class="mc" onclick="ZG.dlgClose()">×</button></div>' +
+      '<div class="zg-note">삭제된 회원의 기본 정보만 보관합니다. 복구가 필요하면 이 정보로 <b>회원 추가</b>를 다시 하세요. (비밀번호는 새로 정해야 합니다)</div>' +
+      '<div style="max-height:55vh;overflow:auto">' + body + '</div>' +
+      '<div style="display:flex;justify-content:flex-end;margin-top:8px"><button class="btn btn-g" onclick="ZG.dlgClose()">닫기</button></div></div>';
     m.classList.add('open');
   }
 
@@ -798,6 +853,15 @@
     var r = byId(id);
     if (!r) return;
     if (kind === 'phones') { ZG.openEditor(id); return; }
+    if (kind === 'delete') {
+      dlg = { kind: 'delete', id: id, name: r.name || '', status: r.status, expires: r.membershipExpiresAt, extraCount: null, err: '' };
+      drawDialog();
+      // 추가 번호 개수를 알려주기 위해 조회 (실패해도 삭제 창은 그대로 쓸 수 있다)
+      api('GET', '/admin/users/' + encodeURIComponent(id) + '/phones').then(function (d) {
+        if (dlg && dlg.kind === 'delete' && dlg.id === id) { dlg.extraCount = (d.extras || []).length; var typed = (document.getElementById('zg-x-name') || {}).value || ''; var rs = (document.getElementById('zg-x-reason') || {}).value || ''; drawDialog(); var a = document.getElementById('zg-x-name'), b = document.getElementById('zg-x-reason'); if (a) a.value = typed; if (b) b.value = rs; ZG.delCheck(); }
+      }).catch(function () { /* 개수만 못 보여줄 뿐 */ });
+      return;
+    }
     if (kind === 'approve') {
       var t = todayKST();
       dlg = { kind: 'approve', id: id, name: r.name || '', start: t, end: addDays(t, 30), err: '' };
@@ -838,6 +902,54 @@
     el.value = n ? n.toLocaleString('ko-KR') : '';
   };
   ZG.setPayMonth = function (m) { state.payMonth = m || ''; drawRows(); };
+
+  // 삭제 확인: 이름이 정확히 같을 때만 삭제 버튼이 켜진다
+  ZG.delCheck = function () {
+    if (!dlg || dlg.kind !== 'delete') return;
+    var typed = ((document.getElementById('zg-x-name') || {}).value || '').trim();
+    var b = document.getElementById('zg-d-ok');
+    if (b) b.disabled = !(typed && typed === String(dlg.name).trim());
+  };
+
+  ZG.delSubmit = function () {
+    if (!dlg || dlg.kind !== 'delete') return;
+    var errEl = document.getElementById('zg-d-err');
+    function fail(msg) { dlg.err = msg; if (errEl) errEl.textContent = msg; }
+    var typed = ((document.getElementById('zg-x-name') || {}).value || '').trim();
+    if (!typed || typed !== String(dlg.name).trim()) return fail('회원 이름을 정확히 입력해 주세요.');
+    var reason = ((document.getElementById('zg-x-reason') || {}).value || '').trim();
+    var okBtn = document.getElementById('zg-d-ok');
+    if (okBtn) okBtn.disabled = true;
+    var name = dlg.name;
+    api('POST', '/admin/members/' + encodeURIComponent(dlg.id) + '/delete', { confirmName: typed, reason: reason })
+      .then(function () {
+        toast(name + ' 님이 삭제되었습니다', 'success');
+        closeDialog();
+        loadAll();
+      })
+      .catch(function (e) {
+        if (e && e.status === 401) { handleErr(e); return; }
+        if (okBtn) okBtn.disabled = false;
+        // 서버에 삭제 기능 자체가 아직 없을 때(앱 기본 404 문구)와, 회원을 못 찾은 경우를 구분한다
+        if (e && e.status === 404 && e.code !== 'MEMBER_NOT_FOUND') return fail('서버에 회원 삭제 기능이 아직 없습니다. 서버 업데이트가 필요합니다. (아무것도 삭제되지 않았습니다)');
+        fail((e && e.message) || '삭제하지 못했습니다');
+      });
+  };
+
+  ZG.showDeleted = function () {
+    dlg = { kind: 'deleted', loading: true, rows: [], error: '' };
+    drawDialog();
+    api('GET', '/admin/members-deleted')
+      .then(function (list) { if (dlg && dlg.kind === 'deleted') { dlg.rows = Array.isArray(list) ? list : []; dlg.loading = false; drawDialog(); } })
+      .catch(function (e) {
+        if (e && e.status === 401) { handleErr(e); return; }
+        if (dlg && dlg.kind === 'deleted') {
+          dlg.loading = false;
+          dlg.error = e && e.status === 404 && e.code !== 'MEMBER_NOT_FOUND' ? '서버에 삭제 기록 기능이 아직 없습니다. (서버 업데이트 필요)' : ((e && e.message) || '불러오지 못했습니다');
+          drawDialog();
+        }
+      });
+  };
 
   // 휴대폰 입력 시 010-0000-0000 형태로 자동 하이픈
   ZG.fmtPhoneInput = function (el) { el.value = fmtPhone(el.value.slice(0, 13)); };
