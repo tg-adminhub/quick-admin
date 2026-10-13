@@ -628,31 +628,24 @@ function showToast(msg,type){
 // IMPORTANT: the client-side gate is presentation only. duo_private is inaccessible
 // through the public browser API; do not enable operational actions without
 // a separately authenticated, server-side authorization endpoint.
+function duoPlanPreview(){
+ var plans={next:[40,60000,'T-oss'],grab:[40,60000,'Grab'],duo_standard:[40,60000,'Duo 일반'],duo_dual:[45,90000,'Duo 듀얼']};
+ var el=document.getElementById('duo-plan-picker'),p=document.getElementById('duo-plan-preview');
+ if(el&&p){var x=plans[el.value]||plans.next;p.textContent=x[2]+' · '+x[0]+'일 추가 · '+x[1].toLocaleString('ko-KR')+'원 (시연 전용)';}
+}
 function renderDuoAdmin(){
- if(!(curAcc && curAcc.username==='jyw6410' && role==='dev')){
-   return '<div class="alert a-red">Duo 접근 권한이 없습니다.</div>';
- }
- var planRows=[
- ['T-oss','40일','60,000원'],
- ['Grab','40일','60,000원'],
- ['Duo 일반','40일','60,000원'],
- ['Duo 듀얼','45일','90,000원']
- ];
- return '<div class="ph"><div><h1>Duo 전용 관리 <span class="badge bg-blue">개발자 전용</span></h1>'
- +'<p>회원·듀얼 승인 및 판매 권한 — 서버 권한 연동 준비 중</p></div></div>'
- +'<div class="alert a-yellow">🔒 이 화면은 개발 브랜치 전용입니다. Duo 회원·매출 데이터는 공개 브라우저에서 조회하지 않습니다. 실제 회원 승인·연장·판매 기능은 보안 서버 연결 후 활성화됩니다.</div>'
- +'<div class="sgrid sg3"><div class="scard"><div class="slabel">Duo 회원</div><div class="sval">—</div><div class="ssub">서버 API 연결 전</div></div>'
- +'<div class="scard"><div class="slabel">듀얼 승인</div><div class="sval">—</div><div class="ssub">별도 승인 체계</div></div>'
- +'<div class="scard"><div class="slabel">Duo 매출</div><div class="sval">—</div><div class="ssub">비공개 데이터</div></div></div>'
- +'<div class="card"><div class="card-head"><span class="card-title">통합 이용권 연장 — 상품 명세</span></div>'
- +'<div class="card-body"><div class="tw"><table><thead><tr><th>앱/상품</th><th>연장 기간</th><th>매출 금액</th><th>관리 권한</th></tr></thead><tbody>'
- +planRows.map(function(p){return '<tr><td>'+p[0]+'</td><td>'+p[1]+'</td><td>'+p[2]+'</td><td>'+(p[0].indexOf('Duo')===0?'Duo 판매 권한 필요':'기존 정책')+'</td></tr>';}).join('')
- +'</tbody></table></div><div style="margin-top:12px"><button class="btn btn-g" disabled>회원 승인 / 연장 처리 (보안 API 연결 후)</button></div></div></div>'
- +'<div class="card" style="margin-top:12px"><div class="card-head"><span class="card-title">권한 규칙</span></div><div class="card-body" style="line-height:1.9">'
- +'• 기사 직접 가입은 승인 대기 / 관리자가 추가하면 즉시 승인<br>'
- +'• Duo 일반 승인과 듀얼 승인 분리<br>'
- +'• Duo 판매 권한은 개발자만 부여 · 기타 관리자는 Duo 정보 접근 불가<br>'
- +'• 연장 시 이용권 만료일과 회계 기록을 원자적으로 처리할 예정'
+ if(!(curAcc&&curAcc.username==='jyw6410'&&role==='dev'))return '<div class="alert a-red">Duo 접근 권한이 없습니다.</div>';
+ var opts=[['next','T-oss',40,60000],['grab','Grab',40,60000],['duo_standard','Duo 일반',40,60000],['duo_dual','Duo 듀얼',45,90000]];
+ return '<div class="ph"><div><h1>Duo 전용 관리 <span class="badge bg-blue">개발자 전용</span></h1><p>회원·듀얼 승인·판매 권한 관리</p></div></div>'
+ +'<div class="alert a-yellow">🔒 개발 브랜치: Duo 회원/매출 데이터는 서버 인증 연결 전까지 불러오지 않습니다. 회원 승인 및 연장 작업도 비활성화 상태입니다.</div>'
+ +'<div class="sgrid sg3"><div class="scard"><div class="slabel">가입 승인 대기</div><div class="sval">—</div></div><div class="scard"><div class="slabel">듀얼 승인 대기</div><div class="sval">—</div></div><div class="scard"><div class="slabel">Duo 매출</div><div class="sval">—</div></div></div>'
+ +'<div class="card"><div class="card-head"><span class="card-title">통합 연장 — 상품 선택</span><span class="badge bg-blue">시연</span></div><div class="card-body">'
+ +'<select class="fi2" id="duo-plan-picker" onchange="duoPlanPreview()" style="max-width:480px">'
+ +opts.map(function(p){return '<option value="'+p[0]+'">'+p[1]+' · '+p[2]+'일 · '+p[3].toLocaleString('ko-KR')+'원</option>';}).join('')+'</select>'
+ +'<div id="duo-plan-preview" class="alert a-blue" style="margin-top:12px">T-oss · 40일 추가 · 60,000원 (시연 전용)</div>'
+ +'<button class="btn btn-g" disabled>연장 확정 (서버 권한 연결 후)</button></div></div>'
+ +'<div class="card" style="margin-top:12px"><div class="card-head"><span class="card-title">Duo 회원·권한 관리</span></div><div class="card-body">'
+ +'<div class="sgrid sg2"><div class="ss"><div class="sst">기사 직접 가입</div><div class="sss">가입 신청 → 승인 대기</div></div><div class="ss"><div class="sst">관리자 회원 추가</div><div class="sss">관리자 생성 → 즉시 승인</div></div><div class="ss"><div class="sst">듀얼 신청</div><div class="sss">별도 심사·승인 후 DUAL 배지</div></div><div class="ss"><div class="sst">판매 관리자 권한</div><div class="sss">개발자만 지정할 수 있음</div></div></div>'
  +'</div></div>';
 }
 
