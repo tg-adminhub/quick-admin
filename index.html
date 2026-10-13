@@ -623,6 +623,39 @@ function showToast(msg,type){
   setTimeout(()=>{t.className='toast '+(type||'info');},2500);
 }
 
+
+// DUO PRIVATE — Phase A: development-only UI, no production data reads or writes.
+// IMPORTANT: the client-side gate is presentation only. duo_private is inaccessible
+// through the public browser API; do not enable operational actions without
+// a separately authenticated, server-side authorization endpoint.
+function renderDuoAdmin(){
+ if(!(curAcc && curAcc.username==='jyw6410' && role==='dev')){
+   return '<div class="alert a-red">Duo 접근 권한이 없습니다.</div>';
+ }
+ var planRows=[
+ ['T-oss','40일','60,000원'],
+ ['Grab','40일','60,000원'],
+ ['Duo 일반','40일','60,000원'],
+ ['Duo 듀얼','45일','90,000원']
+ ];
+ return '<div class="ph"><div><h1>Duo 전용 관리 <span class="badge bg-blue">개발자 전용</span></h1>'
+ +'<p>회원·듀얼 승인 및 판매 권한 — 서버 권한 연동 준비 중</p></div></div>'
+ +'<div class="alert a-yellow">🔒 이 화면은 개발 브랜치 전용입니다. Duo 회원·매출 데이터는 공개 브라우저에서 조회하지 않습니다. 실제 회원 승인·연장·판매 기능은 보안 서버 연결 후 활성화됩니다.</div>'
+ +'<div class="sgrid sg3"><div class="scard"><div class="slabel">Duo 회원</div><div class="sval">—</div><div class="ssub">서버 API 연결 전</div></div>'
+ +'<div class="scard"><div class="slabel">듀얼 승인</div><div class="sval">—</div><div class="ssub">별도 승인 체계</div></div>'
+ +'<div class="scard"><div class="slabel">Duo 매출</div><div class="sval">—</div><div class="ssub">비공개 데이터</div></div></div>'
+ +'<div class="card"><div class="card-head"><span class="card-title">통합 이용권 연장 — 상품 명세</span></div>'
+ +'<div class="card-body"><div class="tw"><table><thead><tr><th>앱/상품</th><th>연장 기간</th><th>매출 금액</th><th>관리 권한</th></tr></thead><tbody>'
+ +planRows.map(function(p){return '<tr><td>'+p[0]+'</td><td>'+p[1]+'</td><td>'+p[2]+'</td><td>'+(p[0].indexOf('Duo')===0?'Duo 판매 권한 필요':'기존 정책')+'</td></tr>';}).join('')
+ +'</tbody></table></div><div style="margin-top:12px"><button class="btn btn-g" disabled>회원 승인 / 연장 처리 (보안 API 연결 후)</button></div></div></div>'
+ +'<div class="card" style="margin-top:12px"><div class="card-head"><span class="card-title">권한 규칙</span></div><div class="card-body" style="line-height:1.9">'
+ +'• 기사 직접 가입은 승인 대기 / 관리자가 추가하면 즉시 승인<br>'
+ +'• Duo 일반 승인과 듀얼 승인 분리<br>'
+ +'• Duo 판매 권한은 개발자만 부여 · 기타 관리자는 Duo 정보 접근 불가<br>'
+ +'• 연장 시 이용권 만료일과 회계 기록을 원자적으로 처리할 예정'
+ +'</div></div>';
+}
+
 // =====================================================================
 //   GLOBAL STATE
 // =====================================================================
@@ -1185,6 +1218,8 @@ function buildSidebar(){
       {p:'guide-admin',ic:'book',l:'어드민 앱 설치'},
       {s:'설정'},
       {p:'settings',ic:'cog',l:'앱 설정'},
+      {s:'DUO 관리'},
+      {p:'duo',ic:'users',l:'Duo 전용 관리'},
       {s:'잡고'},
       {p:'zapgo',ic:'users',l:'잡고 관리'}
     ],
@@ -1266,6 +1301,7 @@ function switchRole(newRole){
 //   NAV
 // =====================================================================
 function navigate(pg){
+  if(pg==='duo' && !(curAcc && curAcc.username==='jyw6410' && role==='dev')){showToast('Duo 접근 권한이 없습니다','error');return;}
   page=pg;
   document.querySelectorAll('.ni').forEach(function(el){el.classList.toggle('active',el.dataset.page===pg);});
   var ps={
@@ -1283,6 +1319,7 @@ function navigate(pg){
     'guide-admin':renderGuideAdmin,
     'guide-next':renderGuideNext,
     'guide-grab':renderGuideGrab,
+    duo:renderDuoAdmin,
     zapgo:function(){return window.renderZapgo?window.renderZapgo():'<div class="empty"><div class="empty-icon">🔧</div><div class="empty-txt">잡고 모듈을 불러오지 못했습니다 (zapgo-admin.js)</div></div>';}
   };
   document.getElementById('page-content').innerHTML=(ps[pg]||function(){return '<div class="empty"><div class="empty-icon">🔧</div><div class="empty-txt">준비 중</div></div>';})();
