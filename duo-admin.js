@@ -20,7 +20,7 @@
   var VEHICLES = ['오토바이', '플렉스', '다마스', '라보', '밴', '1t화물', '1.4t화물'];
 
   var me = null;          // 서버가 준 { admin, grant, branches, plans }
-  var state = { tab: 'pending', filter: 'approved', branch: 'all', q: '', list: [], loading: false, err: '', grants: null, rev: null, revMonth: '' };
+  var state = { tab: 'pending', filter: 'active', branch: 'all', q: '', list: [], loading: false, err: '', grants: null, rev: null, revMonth: '' };
   var dlg = null;
 
   // ---------- 유틸 ----------
@@ -99,7 +99,7 @@
   // ---------- 데이터 ----------
   function loadMembers() {
     state.loading = true; state.err = ''; draw();
-    var st = state.tab === 'pending' ? 'pending' : state.filter;
+    var st = state.tab === 'pending' ? 'pending' : (state.filter === 'active' ? 'all' : state.filter);
     return api({ action: 'members', status: st }).then(function (j) {
       state.loading = false;
       if (!j.ok) { state.err = j.message || '불러오기 실패'; state.list = []; }
@@ -159,7 +159,7 @@
         ? '<button class="btn btn-g btn-sm" onclick="DUOA.dual(' + m.id + ',false)">듀얼 해제</button>'
         : '<button class="btn btn-b btn-sm" onclick="DUOA.dual(' + m.id + ',true)">듀얼 승인' + (m.dual_requested ? ' (신청)' : '') + '</button>');
     }
-    if (m.status === 'suspended' && g.approve) b.push('<button class="btn btn-s btn-sm" onclick="DUOA.setStatus(' + m.id + ',\'approved\')">재개</button>');
+    if (m.status === 'suspended' && g.approve) b.push('<button class="btn btn-s btn-sm" onclick="DUOA.setStatus(' + m.id + ',\'approved\')">정지 해제</button>');
     return '<tr><td><b>' + esc(m.name) + '</b>' + (m.source === 'admin_created' ? ' <span class="badge bg-purple">직접추가</span>' : '') + '</td>' +
       '<td style="font-size:11px">' + esc(fmtPhone(m.phone)) + '</td>' +
       '<td style="font-size:11px">' + esc(m.branch_name || '—') + '</td>' +
@@ -188,11 +188,11 @@
       '<div style="flex:1;min-width:180px"><label class="fl">🔍 이름/번호 검색</label><input class="fi2" id="duo-q" placeholder="이름/번호 검색" value="' + esc(state.q) + '" oninput="DUOA.search(this.value)"></div>' +
       (state.branch !== 'all' || state.q ? '<button class="btn btn-g btn-sm" onclick="DUOA.branch(\'all\',true)">초기화</button>' : '') + '</div></div>';
     if (state.tab === 'members') {
-      h += '<div class="fbar">' + [['approved', '승인'], ['suspended', '정지'], ['rejected', '반려'], ['all', '전체']].map(function (x) {
+      h += '<div class="fbar">' + [['active', '이용중 (승인+정지)'], ['approved', '승인'], ['suspended', '정지'], ['rejected', '반려'], ['all', '전체']].map(function (x) {
         return '<button class="fbtn' + (state.filter === x[0] ? ' on' : '') + '" onclick="DUOA.filter(\'' + x[0] + '\')">' + x[1] + '</button>';
       }).join('') + '</div>';
     }
-    var q = state.q.trim(), list = state.list.filter(function (m) { return inBranch(m) && (!q || (m.name || '').indexOf(q) >= 0 || digits(m.phone).indexOf(digits(q) || '\u0000') >= 0); });
+    var q = state.q.trim(), list = state.list.filter(function (m) { return (state.tab !== 'members' || state.filter !== 'active' || m.status === 'approved' || m.status === 'suspended') && inBranch(m) && (!q || (m.name || '').indexOf(q) >= 0 || digits(m.phone).indexOf(digits(q) || '\u0000') >= 0); });
     h += '<div class="card" style="padding:0"><div class="card-head" style="padding:12px 16px"><div class="card-title">' + (state.tab === 'pending' ? '가입 승인 대기' : 'DUO 회원') + '</div><span style="font-size:11px;color:var(--text2)">' + list.length + '명</span></div>';
     if (!list.length) return h + '<div class="empty"><div class="empty-icon">' + (state.tab === 'pending' ? '✅' : '👤') + '</div><div class="empty-txt">' + (state.tab === 'pending' ? '대기 중인 가입 신청이 없습니다' : '해당 회원이 없습니다') + '</div></div></div>';
     return h + '<div class="tw"><table><thead><tr><th>기사</th><th>휴대폰</th><th>지점</th><th>차종</th><th>신청일</th><th>상태</th><th>이용기간</th><th>관리</th></tr></thead><tbody>' +
@@ -318,8 +318,8 @@
         api({ action: 'set_status', member_id: id, status: 'suspended', reason: document.getElementById('duo-reason').value }).then(function (j) { after(j, '정지했습니다'); });
       });
     } else {
-      if (!confirm((m.name || '') + ' 님의 정지를 해제할까요?')) return;
-      api({ action: 'set_status', member_id: id, status: 'approved' }).then(function (j) { if (!j.ok) return toast(j.message, 'error'); toast('재개했습니다', 'success'); load(); });
+      if (!confirm((m.name || '') + ' 님의 정지를 해제할까요?\n(해제하면 남은 이용기간 동안 바로 앱을 쓸 수 있습니다)')) return;
+      api({ action: 'set_status', member_id: id, status: 'approved' }).then(function (j) { if (!j.ok) return toast(j.message, 'error'); toast('정지를 해제했습니다', 'success'); load(); });
     }
   };
   DUOA.dual = function (id, approve) {
@@ -387,7 +387,7 @@
         api({ action: 'create_member', name: document.getElementById('duo-c-name').value.trim(), phone: document.getElementById('duo-c-phone').value,
           branch_id: parseInt(document.getElementById('duo-c-branch').value, 10) || null, vehicle: document.getElementById('duo-c-veh').value || null,
           password: document.getElementById('duo-c-pw').value }).then(function (j) {
-          if (after(j, '기사를 추가했습니다')) { state.tab = 'members'; state.filter = 'approved'; load(); }
+          if (after(j, '기사를 추가했습니다')) { state.tab = 'members'; state.filter = 'active'; load(); }
         });
       });
   };
