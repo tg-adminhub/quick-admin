@@ -890,6 +890,7 @@ async function doLogin(){
     role=realRole;
     user={name:data.name,id:data.username,orgId:data.branch_id,dbId:data.id};
     try{if(window.ZG&&ZG.autoLogin)ZG.autoLogin(id,pw);}catch(e){}
+    try{if(window.DUOA)DUOA.login(id,pw);}catch(e){}  // DUO: 같은 계정으로 서버 관리자 확인 (별도 로그인 없음)
     
     // ★ 2026-08-18: 아이디 저장 체크 시 아이디만 기억 (비번은 저장 안 함)
     try{
@@ -970,6 +971,7 @@ async function tryAutoLogin(){
     await loadAllData();
     buildSidebar();
     navigate('dashboard');
+    try{if(window.DUOA)DUOA.restore();}catch(e){}  // DUO: 저장된 서버 세션이 유효하면 메뉴 복원
     setTimeout(checkExpiry,700);
     startInactivityTimer();
     return true;
@@ -1009,6 +1011,7 @@ function updateLastActivity(){
 
 function doLogout(){
   try{if(window.ZG&&ZG.clearSession)ZG.clearSession();}catch(e){}
+  try{if(window.DUOA)DUOA.logout();}catch(e){}
   // ★ 세션 정리
   try{
     localStorage.removeItem('qa_session');
@@ -1233,7 +1236,9 @@ function buildSidebar(){
       {p:'my-settings',ic:'cog',l:'내 설정'}
     ]
   };
-  var navItems=(navMap[role]||navMap.dev).filter(function(item){return item.p!=='duo-preview' || isSuperDev();});
+  var navItems=(navMap[role]||navMap.dev).filter(function(item){return item.p!=='duo-preview' && item.s!=='DUO';});
+  // DUO: 서버가 DUO 권한을 준 관리자에게만 메뉴 표시 (기본은 권한 없음)
+  if(window.DUOA&&DUOA.hasAccess()){navItems=navItems.concat([{s:'DUO'},{p:'duo',ic:'users',l:'DUO 관리'}]);}
   
   var ic={
     grid:'<rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/>',
@@ -1300,6 +1305,7 @@ function navigate(pg){
     'guide-next':renderGuideNext,
     'guide-grab':renderGuideGrab,
     'duo-preview':renderDuoPreview,
+    duo:function(){return window.renderDuo?window.renderDuo():'<div class="empty"><div class="empty-icon">🔧</div><div class="empty-txt">DUO 모듈을 불러오지 못했습니다 (duo-admin.js)</div></div>';},
     zapgo:function(){return window.renderZapgo?window.renderZapgo():'<div class="empty"><div class="empty-icon">🔧</div><div class="empty-txt">잡고 모듈을 불러오지 못했습니다 (zapgo-admin.js)</div></div>';}
   };
   document.getElementById('page-content').innerHTML=(ps[pg]||function(){return '<div class="empty"><div class="empty-icon">🔧</div><div class="empty-txt">준비 중</div></div>';})();
@@ -5634,5 +5640,6 @@ function clearSchedule(id){
 </script>
 
 <script src="zapgo-admin.js"></script>
+<script src="duo-admin.js"></script>
 </body>
 </html>
