@@ -1185,6 +1185,8 @@ function buildSidebar(){
       {p:'guide-admin',ic:'book',l:'어드민 앱 설치'},
       {s:'설정'},
       {p:'settings',ic:'cog',l:'앱 설정'},
+      {s:'DUO (개발 미리보기)'},
+      {p:'duo-preview',ic:'users',l:'DUO 관리 준비'},
       {s:'잡고'},
       {p:'zapgo',ic:'users',l:'잡고 관리'}
     ],
@@ -1262,6 +1264,21 @@ function switchRole(newRole){
   navigate('dashboard');
 }
 
+
+// DUO development preview: no user records, payments or privileged writes.
+// IMPORTANT: QUICK ADMIN currently uses browser-side role lookup; this page is NOT
+// an authorization boundary. Never connect live DUO records before server auth.
+function renderDuoPreview(){
+  if(realRole!=='dev')return '<div class="ss"><div class="sst">접근 권한 확인 필요</div><p class="sss">DUO 관리 기능은 서버 인증 및 권한 승인 후 제공됩니다.</p></div>';
+  return '<div class="ph"><div><h1>DUO 관리 <span class="badge bg-yellow">개발 미리보기</span></h1><p>기존 QUICK ADMIN 통합 화면 · 실제 회원 데이터 조회 및 승인 기능 비활성</p></div></div>'+
+  '<div class="sgrid sg2">'+
+  '<div class="scard"><div class="slabel">DUO 일반 이용권</div><div class="sval">60,000원</div><div class="ssub">40일 · 설정 초안 (비활성)</div></div>'+
+  '<div class="scard"><div class="slabel">DUO 듀얼 이용권</div><div class="sval">90,000원</div><div class="ssub">45일 · 별도 듀얼 승인 필요</div></div></div>'+
+  '<div class="ss"><div class="ssh"><div class="sst">회원가입 · 승인 · 연장</div></div><p class="fd">Supabase 관리자 인증 연동 전에는 실제 회원정보나 권한을 조회·수정할 수 없습니다.</p>'+
+  '<button class="btn btn-g" disabled>가입 신청 확인 (준비 중)</button> <button class="btn btn-g" disabled>DUO 앱 승인 (준비 중)</button> <button class="btn btn-g" disabled>듀얼 승인 (준비 중)</button> <button class="btn btn-g" disabled>이용권 연장 (준비 중)</button></div>'+
+  '<div class="ss"><div class="ssh"><div class="sst">관리자 서비스·조직 접근 정책</div></div><p class="fd">T-oss / Grab / DUO 별도 권한. 매출 조회는 별도 권한을 가진 관리자가 본인과 하위 조직 범위에서만 이용할 수 있습니다. 상위·형제·다른 총판은 제외됩니다.</p><p class="fd">현재 운영 회원/매출 조회와 연결하지 않았습니다. 권한은 서버에서 검증해야 합니다.</p></div>';
+}
+
 // =====================================================================
 //   NAV
 // =====================================================================
@@ -1283,6 +1300,7 @@ function navigate(pg){
     'guide-admin':renderGuideAdmin,
     'guide-next':renderGuideNext,
     'guide-grab':renderGuideGrab,
+    'duo-preview':renderDuoPreview,
     zapgo:function(){return window.renderZapgo?window.renderZapgo():'<div class="empty"><div class="empty-icon">🔧</div><div class="empty-txt">잡고 모듈을 불러오지 못했습니다 (zapgo-admin.js)</div></div>';}
   };
   document.getElementById('page-content').innerHTML=(ps[pg]||function(){return '<div class="empty"><div class="empty-icon">🔧</div><div class="empty-txt">준비 중</div></div>';})();
