@@ -1,0 +1,8 @@
+<!doctype html>
+<html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>QUICK ADMIN · DUO 개발 미리보기</title>
+<style>body{margin:0;background:#111318;color:#eee;font:14px system-ui;padding:28px}main{max-width:900px;margin:auto}h1{font-size:24px}section{background:#1b2028;border:1px solid #363c47;padding:20px;border-radius:12px;margin:14px 0}small{color:#b7bdc7}table{width:100%;border-collapse:collapse}td,th{text-align:left;border-bottom:1px solid #373c44;padding:10px}button{background:#414958;border:0;border-radius:6px;padding:10px 14px;color:white}b{color:#ffe2a2}</style></head>
+<body><main><h1>QUICK ADMIN / DUO 관리</h1><p>개발용 화면 · 운영 미배포 · 실제 승인 및 연장 기능 비활성화</p>
+<section><h2>서비스 접근</h2><p>현재 로그인 방식으로는 DUO 서버 권한을 검증할 수 없습니다. 승인된 Supabase 관리자 인증 연결 완료 후 활성화됩니다.</p><button disabled>DUO 회원 승인</button> <button disabled>듀얼 승인</button> <button disabled>이용권 연장</button></section>
+<section><h2>DUO 이용권 설정</h2><table><thead><tr><th>상품</th><th>기본 가격</th><th>이용 기간</th><th>운영 상태</th></tr></thead><tbody><tr><td>DUO 일반</td><td>60,000원</td><td>40일</td><td>미활성 초안</td></tr><tr><td>DUO 듀얼</td><td>90,000원</td><td>45일</td><td>미활성 초안</td></tr></tbody></table></section>
+<section><h2>권한 정책</h2><p>서비스별 접근 권한과 매출 접근은 별도로 승인됩니다. 총판은 본인과 하위 조직, 지사는 본인과 하위 지점, 지점은 자기 조직만 조회할 수 있습니다. 승인되지 않은 데이터는 서버에서 반환하지 않습니다.</p><small>현재 실제 QUICK ADMIN의 로그인과 권한 백엔드를 교체하지 않았으므로 이 페이지에서 회원·매출 데이터를 조회하지 않습니다.</small></section>
+</main></body></html>
