@@ -1,0 +1,16 @@
+import assert from 'node:assert/strict';
+import {authorized, descendants, visibleServices} from './access-policy.mjs';
+const tree=[{id:1,parent_id:null},{id:2,parent_id:1},{id:3,parent_id:2},{id:4,parent_id:1},{id:5,parent_id:null}];
+const g={service:'duo',can_members:true,can_revenue:false,can_approve:true,can_dual_approve:false,scope:'subtree'};
+assert.deepEqual(descendants(tree,2),[2,3]);
+assert.equal(authorized(g,'members','duo',3,2,tree),true);
+assert.equal(authorized(g,'members','duo',1,2,tree),false);
+assert.equal(authorized(g,'members','duo',4,2,tree),false);
+assert.equal(authorized(g,'members','duo',5,2,tree),false);
+assert.equal(authorized(g,'members','grab',3,2,tree),false);
+assert.equal(authorized(g,'revenue','duo',3,2,tree),false);
+assert.equal(authorized(g,'dualApprove','duo',3,2,tree),false);
+assert.equal(authorized({...g,scope:'global'},'members','duo',5,2,tree),false);
+assert.equal(authorized({...g,scope:'global'},'members','duo',5,2,tree,true),true);
+assert.deepEqual(visibleServices([g]),['duo']);
+console.log('ACCESS POLICY TESTS PASS');
