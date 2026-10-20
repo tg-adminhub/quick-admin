@@ -20,7 +20,7 @@
   var VEHICLES = ['오토바이', '플렉스', '다마스', '라보', '밴', '1t화물', '1.4t화물'];
 
   var me = null;          // 서버가 준 { admin, grant, branches, plans }
-  var state = { tab: 'pending', filter: 'approved', q: '', list: [], loading: false, err: '', grants: null, rev: null, revMonth: '' };
+  var state = { tab: 'pending', filter: 'approved', branch: 'all', q: '', list: [], loading: false, err: '', grants: null, rev: null, revMonth: '' };
   var dlg = null;
 
   // ---------- 유틸 ----------
@@ -171,14 +171,28 @@
       '<td><div style="display:flex;gap:4px;flex-wrap:wrap">' + (b.join('') || '<span style="font-size:11px;color:var(--text2)">—</span>') + '</div></td></tr>';
   }
 
+  // 소속별 보기: 기존 회원관리와 같은 총판 → 지사 → 지점 목록. 상위 선택 시 하위 소속 포함 (보기 필터일 뿐, 범위 제한은 서버)
+  function branchSelect() {
+    try { if (typeof buildBranchFilterSelect === 'function') return buildBranchFilterSelect('duo-branch-filter', state.branch, 'DUOA.branch(this.value)'); } catch (e) { }
+    return '<select class="fi2" id="duo-branch-filter" onchange="DUOA.branch(this.value)"><option value="all">📋 전체 소속</option>' +
+      (me.branches || []).map(function (b) { return '<option value="' + b.id + '"' + (String(state.branch) === String(b.id) ? ' selected' : '') + '>' + esc(b.name) + '</option>'; }).join('') + '</select>';
+  }
+  function inBranch(m) {
+    if (state.branch === 'all') return true;
+    try { if (typeof matchBranchFilter === 'function') return matchBranchFilter(m.branch_id, state.branch); } catch (e) { }
+    return String(m.branch_id) === String(state.branch);
+  }
   function membersHtml() {
-    var h = '';
+    var h = '<div class="card" style="padding:14px;margin-bottom:12px"><div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end">' +
+      '<div style="min-width:220px"><label class="fl">🏢 소속별 보기</label>' + branchSelect() + '</div>' +
+      '<div style="flex:1;min-width:180px"><label class="fl">🔍 이름/번호 검색</label><input class="fi2" placeholder="이름/번호 검색" value="' + esc(state.q) + '" oninput="DUOA.search(this.value)"></div>' +
+      (state.branch !== 'all' || state.q ? '<button class="btn btn-g btn-sm" onclick="DUOA.branch(\'all\',true)">초기화</button>' : '') + '</div></div>';
     if (state.tab === 'members') {
       h += '<div class="fbar">' + [['approved', '승인'], ['suspended', '정지'], ['rejected', '반려'], ['all', '전체']].map(function (x) {
         return '<button class="fbtn' + (state.filter === x[0] ? ' on' : '') + '" onclick="DUOA.filter(\'' + x[0] + '\')">' + x[1] + '</button>';
-      }).join('') + '<input class="fi2" style="max-width:220px;margin-left:auto" placeholder="이름/번호 검색" value="' + esc(state.q) + '" oninput="DUOA.search(this.value)"></div>';
+      }).join('') + '</div>';
     }
-    var q = state.q.trim(), list = state.list.filter(function (m) { return !q || (m.name || '').indexOf(q) >= 0 || digits(m.phone).indexOf(digits(q) || '\u0000') >= 0; });
+    var q = state.q.trim(), list = state.list.filter(function (m) { return inBranch(m) && (!q || (m.name || '').indexOf(q) >= 0 || digits(m.phone).indexOf(digits(q) || '\u0000') >= 0); });
     h += '<div class="card" style="padding:0"><div class="card-head" style="padding:12px 16px"><div class="card-title">' + (state.tab === 'pending' ? '가입 승인 대기' : 'DUO 회원') + '</div><span style="font-size:11px;color:var(--text2)">' + list.length + '명</span></div>';
     if (!list.length) return h + '<div class="empty"><div class="empty-icon">' + (state.tab === 'pending' ? '✅' : '👤') + '</div><div class="empty-txt">' + (state.tab === 'pending' ? '대기 중인 가입 신청이 없습니다' : '해당 회원이 없습니다') + '</div></div></div>';
     return h + '<div class="tw"><table><thead><tr><th>기사</th><th>휴대폰</th><th>지점</th><th>차종</th><th>신청일</th><th>상태</th><th>이용기간</th><th>관리</th></tr></thead><tbody>' +
@@ -260,6 +274,7 @@
   // ---------- 동작 ----------
   DUOA.tab = function (t) { state.tab = t; state.q = ''; state.err = ''; load(); };
   DUOA.filter = function (f) { state.filter = f; load(); };
+  DUOA.branch = function (v, resetSearch) { state.branch = v || 'all'; if (resetSearch) state.q = ''; draw(); };
   DUOA.search = function (v) { state.q = v; var r = root(); var pos = document.activeElement && document.activeElement.selectionStart; draw(); var i = r && r.querySelector('input[placeholder="이름/번호 검색"]'); if (i) { i.focus(); try { i.setSelectionRange(pos, pos); } catch (e) { } } };
   DUOA.reload = function () { DUOA.restore().then(load); };
   DUOA.revMonth = function (v) { state.revMonth = v; loadRevenue(); };
