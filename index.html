@@ -1185,6 +1185,8 @@ function buildSidebar(){
       {p:'guide-admin',ic:'book',l:'어드민 앱 설치'},
       {s:'설정'},
       {p:'settings',ic:'cog',l:'앱 설정'},
+      {s:'DUO'},
+      {p:'duo-preview',ic:'users',l:'DUO 관리 (준비 중)'},
       {s:'잡고'},
       {p:'zapgo',ic:'users',l:'잡고 관리'}
     ],
@@ -1231,7 +1233,7 @@ function buildSidebar(){
       {p:'my-settings',ic:'cog',l:'내 설정'}
     ]
   };
-  var navItems=navMap[role]||navMap.dev;
+  var navItems=(navMap[role]||navMap.dev).filter(function(item){return item.p!=='duo-preview' || isSuperDev();});
   
   var ic={
     grid:'<rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/>',
@@ -1262,6 +1264,19 @@ function switchRole(newRole){
   navigate('dashboard');
 }
 
+
+// DUO preparation panel: no live member, payment or privileged API calls.
+function renderDuoPreview(){
+ if(!isSuperDev())return '<div class="ss"><div class="sst">접근 권한 없음</div></div>';
+ return '<div class="ph"><div><h1>DUO 관리 <span class="badge bg-yellow">개발 준비</span></h1><p>기존 QUICK ADMIN 통합 · 실사용 권한 연결 전</p></div></div>'+
+ '<div class="sgrid sg2"><div class="scard"><div class="slabel">DUO 일반</div><div class="sval">60,000원</div><div class="ssub">40일 · 미활성</div></div>'+
+ '<div class="scard"><div class="slabel">DUO 듀얼</div><div class="sval">90,000원</div><div class="ssub">45일 · 미활성</div></div></div>'+
+ '<div class="ss"><div class="ssh"><div class="sst">가입 신청 · 이용 승인 · 연장</div></div>'+
+ '<p class="fd">관리자 인증 및 조직별 서버 권한 검증을 완료한 뒤 활성화됩니다.</p>'+
+ '<button class="btn btn-g" disabled>가입 신청 조회 (준비 중)</button> <button class="btn btn-g" disabled>앱 사용 승인 (준비 중)</button> <button class="btn btn-g" disabled>듀얼 승인 (준비 중)</button> <button class="btn btn-g" disabled>이용권 연장 (준비 중)</button></div>'+
+ '<div class="ss"><p class="fd">서비스별 권한과 조직별 매출 접근은 서로 독립적이며, 서버 검증 전까지 DUO 회원·매출을 표시하지 않습니다.</p></div>';
+}
+
 // =====================================================================
 //   NAV
 // =====================================================================
@@ -1283,6 +1298,7 @@ function navigate(pg){
     'guide-admin':renderGuideAdmin,
     'guide-next':renderGuideNext,
     'guide-grab':renderGuideGrab,
+    'duo-preview':renderDuoPreview,
     zapgo:function(){return window.renderZapgo?window.renderZapgo():'<div class="empty"><div class="empty-icon">🔧</div><div class="empty-txt">잡고 모듈을 불러오지 못했습니다 (zapgo-admin.js)</div></div>';}
   };
   document.getElementById('page-content').innerHTML=(ps[pg]||function(){return '<div class="empty"><div class="empty-icon">🔧</div><div class="empty-txt">준비 중</div></div>';})();
