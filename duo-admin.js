@@ -185,7 +185,7 @@
   function membersHtml() {
     var h = '<div class="card" style="padding:14px;margin-bottom:12px"><div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end">' +
       '<div style="min-width:220px"><label class="fl">🏢 소속별 보기</label>' + branchSelect() + '</div>' +
-      '<div style="flex:1;min-width:180px"><label class="fl">🔍 이름/번호 검색</label><input class="fi2" placeholder="이름/번호 검색" value="' + esc(state.q) + '" oninput="DUOA.search(this.value)"></div>' +
+      '<div style="flex:1;min-width:180px"><label class="fl">🔍 이름/번호 검색</label><input class="fi2" id="duo-q" placeholder="이름/번호 검색" value="' + esc(state.q) + '" oninput="DUOA.search(this.value)"></div>' +
       (state.branch !== 'all' || state.q ? '<button class="btn btn-g btn-sm" onclick="DUOA.branch(\'all\',true)">초기화</button>' : '') + '</div></div>';
     if (state.tab === 'members') {
       h += '<div class="fbar">' + [['approved', '승인'], ['suspended', '정지'], ['rejected', '반려'], ['all', '전체']].map(function (x) {
@@ -222,17 +222,38 @@
     return h + '</tbody></table></div></div>';
   }
 
+  var PLAN_LABEL = { duo_standard: 'DUO 일반', duo_dual: 'DUO 듀얼', duo_trial: '체험', duo_custom: '직접 지정' };
+  function revRows() { return ((state.rev && state.rev.rows) || []).filter(inBranch); }
   function revenueHtml() {
     var r = state.rev;
-    var h = '<div class="card" style="padding:14px;margin-bottom:12px"><label class="fl">조회 월</label><input class="fi2" type="month" style="max-width:200px" value="' + esc(state.revMonth) + '" onchange="DUOA.revMonth(this.value)"></div>';
+    var h = '<div class="card" style="padding:14px;margin-bottom:12px"><div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end">' +
+      '<div><label class="fl">📅 조회 월</label><input class="fi2" type="month" style="width:170px" value="' + esc(state.revMonth) + '" onchange="DUOA.revMonth(this.value)"></div>' +
+      '<div style="min-width:220px"><label class="fl">🏢 소속별 보기</label>' + branchSelect() + '</div>' +
+      '<div style="flex:1;min-width:160px"><label class="fl">🔍 기사/입금자 검색</label><input class="fi2" id="duo-q" placeholder="이름/번호/입금자" value="' + esc(state.q) + '" oninput="DUOA.search(this.value)"></div>' +
+      (r && r.rows && r.rows.length ? '<button class="btn btn-g btn-sm" onclick="DUOA.revCsv()">📊 엑셀(CSV)</button>' : '') + '</div></div>';
     if (!r) return h;
-    var by = r.by_plan || {};
-    return h + '<div class="sgrid sg4">' +
-      '<div class="scard"><div class="slabel">합계</div><div class="sval">' + won(r.total) + '</div><div class="ssub">' + r.count + '건</div></div>' +
+    var q = state.q.trim();
+    var rows = revRows().filter(function (x) { return !q || (x.name || '').indexOf(q) >= 0 || (x.payer || '').indexOf(q) >= 0 || (digits(q) && digits(x.phone).indexOf(digits(q)) >= 0); });
+    var sum = { total: 0, paid: 0 }, by = {};
+    rows.forEach(function (x) { sum.total += x.amount || 0; if (x.amount > 0) sum.paid++; by[x.plan] = (by[x.plan] || 0) + (x.amount || 0); });
+    h += '<div class="sgrid sg4" style="margin-bottom:12px">' +
+      '<div class="scard"><div class="slabel">매출 합계</div><div class="sval">' + won(sum.total) + '</div><div class="ssub">유료 ' + sum.paid + '건 · 전체 ' + rows.length + '건</div></div>' +
       '<div class="scard"><div class="slabel">DUO 일반</div><div class="sval">' + won(by.duo_standard) + '</div></div>' +
       '<div class="scard"><div class="slabel">DUO 듀얼</div><div class="sval">' + won(by.duo_dual) + '</div></div>' +
-      '<div class="scard"><div class="slabel">체험 (0원)</div><div class="sval">' + won(by.duo_trial) + '</div></div></div>' +
-      '<p class="fd" style="margin-top:8px">담당 범위 안 회원의 이용권 부여 기록 기준입니다.</p>';
+      '<div class="scard"><div class="slabel">직접 지정</div><div class="sval">' + won(by.duo_custom) + '</div><div class="ssub">체험 0원 제외</div></div></div>';
+    h += '<div class="card" style="padding:0"><div class="card-head" style="padding:12px 16px"><div class="card-title">이용권 부여 내역 (입금 확인용)</div><span style="font-size:11px;color:var(--text2)">' + rows.length + '건</span></div>';
+    if (!rows.length) return h + '<div class="empty"><div class="empty-icon">💰</div><div class="empty-txt">해당 기간·소속의 이용권 부여 내역이 없습니다</div></div></div>';
+    return h + '<div class="tw"><table><thead><tr><th>일시</th><th>기사</th><th>지점</th><th>이용권</th><th>금액</th><th>입금자</th><th>기간 변경</th><th>처리자</th></tr></thead><tbody>' +
+      rows.map(function (x) {
+        return '<tr><td style="font-size:11px;white-space:nowrap">' + fmtDate(x.at) + ' ' + esc(new Date(x.at).toTimeString().slice(0, 5)) + '</td>' +
+          '<td><b>' + esc(x.name) + '</b><div style="font-size:11px;color:var(--text2)">' + esc(fmtPhone(x.phone)) + '</div></td>' +
+          '<td style="font-size:11px">' + esc(x.branch_name || '—') + '</td>' +
+          '<td><span class="badge ' + (x.amount > 0 ? 'bg-green' : 'bg-gray') + '">' + esc(PLAN_LABEL[x.plan] || x.plan_name || x.plan) + '</span><div style="font-size:11px;color:var(--text2)">' + x.days + '일</div></td>' +
+          '<td style="font-weight:700;white-space:nowrap">' + won(x.amount) + '</td>' +
+          '<td style="font-size:12px">' + esc(x.payer || '—') + (x.memo ? '<div style="font-size:11px;color:var(--text2)">' + esc(x.memo) + '</div>' : '') + '</td>' +
+          '<td style="font-size:11px;white-space:nowrap">' + fmtDate(x.prior) + ' → <b>' + fmtDate(x.until) + '</b></td>' +
+          '<td style="font-size:11px">' + esc(x.operator || '—') + '</td></tr>';
+      }).join('') + '</tbody></table></div></div>';
   }
 
   function draw() {
@@ -275,7 +296,7 @@
   DUOA.tab = function (t) { state.tab = t; state.q = ''; state.err = ''; load(); };
   DUOA.filter = function (f) { state.filter = f; load(); };
   DUOA.branch = function (v, resetSearch) { state.branch = v || 'all'; if (resetSearch) state.q = ''; draw(); };
-  DUOA.search = function (v) { state.q = v; var r = root(); var pos = document.activeElement && document.activeElement.selectionStart; draw(); var i = r && r.querySelector('input[placeholder="이름/번호 검색"]'); if (i) { i.focus(); try { i.setSelectionRange(pos, pos); } catch (e) { } } };
+  DUOA.search = function (v) { state.q = v; var r = root(); var pos = document.activeElement && document.activeElement.selectionStart; draw(); var i = document.getElementById('duo-q'); if (i) { i.focus(); try { i.setSelectionRange(pos, pos); } catch (e) { } } };
   DUOA.reload = function () { DUOA.restore().then(load); };
   DUOA.revMonth = function (v) { state.revMonth = v; loadRevenue(); };
 
@@ -306,22 +327,52 @@
     if (!confirm((m.name || '') + (approve ? ' 님을 듀얼 이용자로 승인할까요?' : ' 님의 듀얼 승인을 해제할까요?'))) return;
     api({ action: 'dual', member_id: id, approve: approve }).then(function (j) { if (!j.ok) return toast(j.message, 'error'); toast(approve ? '듀얼 승인했습니다' : '듀얼 해제했습니다', 'success'); load(); });
   };
+  function ymd(d) { return d.getFullYear() + '-' + ('0' + (d.getMonth() + 1)).slice(-2) + '-' + ('0' + d.getDate()).slice(-2); }
   DUOA.openLicense = function (id) {
     var m = find(id), plans = (me.plans || []), idem = uuid();
+    var base = new Date(Math.max(Date.now(), m.license_expires_at ? new Date(m.license_expires_at).getTime() : 0));
+    var minD = new Date(base.getTime() + 86400000), defD = new Date(base.getTime() + 30 * 86400000);
+    var row = function (inner, dis) { return '<label style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;padding:7px 0;' + (dis ? 'opacity:.45' : '') + '">' + inner + '</label>'; };
     var opts = plans.map(function (p) {
       var dis = p.code === 'duo_dual' && m.tier !== 'dual';
-      return '<label style="display:flex;gap:8px;align-items:center;padding:8px 0;' + (dis ? 'opacity:.45' : '') + '"><input type="radio" name="duo-kind" value="' + esc(p.code) + '"' + (dis ? ' disabled' : '') + '> <b>' + esc(p.name) + '</b> · ' + won(p.price) + ' · ' + p.days + '일' + (dis ? ' <span style="font-size:11px">(듀얼 승인 필요)</span>' : '') + '</label>';
+      return row('<input type="radio" name="duo-kind" value="' + esc(p.code) + '"' + (dis ? ' disabled' : '') + '> <b>' + esc(PLAN_LABEL[p.code] || p.name) + '</b> · ' + won(p.price) + ' · ' + p.days + '일' + (dis ? ' <span style="font-size:11px">(듀얼 승인 필요)</span>' : ''), dis);
     }).join('');
     openDialog('이용권 부여 — ' + esc(m.name),
-      '<div class="fd" style="margin-bottom:6px">현재 만료일: <b>' + fmtDate(m.license_expires_at) + '</b> · 남은 기간 뒤에 이어서 더해집니다.</div>' + opts +
-      '<label style="display:flex;gap:8px;align-items:center;padding:8px 0"><input type="radio" name="duo-kind" value="trial" checked> <b>체험</b> · 0원 · <input class="fi2" id="duo-days" type="number" min="1" max="60" value="3" style="width:80px"> 일</label>',
+      '<div class="fd" style="margin-bottom:4px">현재 만료일: <b>' + fmtDate(m.license_expires_at) + '</b> · 상품/체험은 남은 기간 뒤에 이어서 더해집니다.</div>' + opts +
+      row('<input type="radio" name="duo-kind" value="trial" checked> <b>체험</b> · 0원 · <input class="fi2" id="duo-days" type="number" min="1" max="60" value="3" style="width:80px" onfocus="DUOA.pick(\'trial\')"> 일') +
+      row('<input type="radio" name="duo-kind" value="custom"> <b>직접 지정</b> · 만료일 <input class="fi2" id="duo-until" type="date" min="' + ymd(minD) + '" value="' + ymd(defD) + '" style="width:160px" onfocus="DUOA.pick(\'custom\')">' +
+        ' · 금액 <input class="fi2" id="duo-amount" inputmode="numeric" placeholder="0" style="width:120px" onfocus="DUOA.pick(\'custom\')" oninput="this.value=this.value.replace(/[^0-9]/g,\'\').replace(/\\B(?=(\\d{3})+(?!\\d))/g,\',\')"> 원') +
+      '<div class="fd" style="margin:-2px 0 8px 24px">직접 지정: 고른 날짜 <b>그날 밤 23:59</b>까지 이용 가능. 금액은 실제 입금액 (무료면 0)</div>' +
+      '<div style="display:flex;gap:8px"><div class="fg" style="flex:1;margin:0"><label class="fl">입금자명</label><input class="fi2" id="duo-payer" maxlength="40" placeholder="기사와 다르면 입력"></div>' +
+      '<div class="fg" style="flex:1.4;margin:0"><label class="fl">메모</label><input class="fi2" id="duo-memo" maxlength="200" placeholder="예) 계좌이체 10/20"></div></div>',
       '부여', function () {
         var k = (document.querySelector('input[name="duo-kind"]:checked') || {}).value;
-        var days = parseInt(document.getElementById('duo-days').value, 10);
-        api({ action: 'license', member_id: id, kind: k, days: k === 'trial' ? days : null, idem: idem }).then(function (j) {
-          after(j, j.ok ? '이용권 부여 · 만료 ' + fmtDate(j.data.license_expires_at) : '');
+        var body = { action: 'license', member_id: id, kind: k, idem: idem,
+          payer: document.getElementById('duo-payer').value, memo: document.getElementById('duo-memo').value };
+        if (k === 'trial') body.days = parseInt(document.getElementById('duo-days').value, 10);
+        if (k === 'custom') {
+          body.until = document.getElementById('duo-until').value;
+          var a = digits(document.getElementById('duo-amount').value);
+          if (!body.until) return dlgErr('만료일을 선택하세요.');
+          if (a === '') return dlgErr('금액을 입력하세요. (무료면 0)');
+          body.amount = parseInt(a, 10);
+        }
+        api(body).then(function (j) {
+          after(j, j.ok ? '이용권 부여 · ' + won(j.data.amount) + ' · 만료 ' + fmtDate(j.data.license_expires_at) : '');
         });
       });
+  };
+  DUOA.pick = function (k) { var r = document.querySelector('input[name="duo-kind"][value="' + k + '"]'); if (r) r.checked = true; };
+  DUOA.revCsv = function () {
+    var rows = revRows(), head = ['일시', '기사', '휴대폰', '지점', '이용권', '기간(일)', '금액', '입금자', '메모', '이전 만료', '새 만료', '처리자'];
+    var q = function (v) { v = String(v == null ? '' : v); return /[",\n]/.test(v) ? '"' + v.replace(/"/g, '""') + '"' : v; };
+    var csv = '﻿' + [head.join(',')].concat(rows.map(function (x) {
+      return [new Date(x.at).toLocaleString('ko-KR'), x.name, fmtPhone(x.phone), x.branch_name, PLAN_LABEL[x.plan] || x.plan, x.days, x.amount, x.payer, x.memo, fmtDate(x.prior), fmtDate(x.until), x.operator].map(q).join(',');
+    })).join('\n');
+    var a = document.createElement('a');
+    a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }));
+    a.download = 'DUO_매출_' + state.revMonth + (state.branch !== 'all' ? '_' + state.branch : '') + '.csv';
+    document.body.appendChild(a); a.click(); a.remove();
   };
   DUOA.openCreate = function () {
     var br = (me.branches || []).map(function (b) { return '<option value="' + b.id + '">' + esc(b.name) + '</option>'; }).join('');
