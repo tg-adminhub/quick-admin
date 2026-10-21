@@ -122,7 +122,12 @@
     state.loading = true; draw();
     return api({ action: 'revenue', from: from.toISOString(), to: to.toISOString() }).then(function (j) { state.loading = false; state.rev = j.ok ? j.data : null; state.err = j.ok ? '' : j.message; draw(); });
   }
+  function loadRelease() {
+    state.loading = true; draw();
+    return api({ action: 'release_get' }).then(function (j) { state.loading = false; state.release = j.ok ? j.data : null; state.err = j.ok ? '' : errMsg(j); draw(); });
+  }
   function load() {
+    if (state.tab === 'release') return loadRelease();
     if (state.tab === 'grants') return loadGrants();
     if (state.tab === 'revenue') return loadRevenue();
     return loadMembers();
@@ -133,6 +138,7 @@
     var g = me.grant, t = [['pending', '⏳ 승인 대기'], ['members', '👥 회원']];
     if (g.delegate) t.push(['grants', '🔑 관리자 권한']);
     if (g.revenue) t.push(['revenue', '💰 매출']);
+    if (g.delegate && g.scope === 'global') t.push(['release', '📦 앱 배포']);
     return '<div class="fbar">' + t.map(function (x) {
       return '<button class="fbtn' + (state.tab === x[0] ? ' on' : '') + '" onclick="DUOA.tab(\'' + x[0] + '\')">' + x[1] + '</button>';
     }).join('') + '</div>';
@@ -260,6 +266,25 @@
       }).join('') + '</tbody></table></div></div>';
   }
 
+  function releaseHtml() {
+    var d = (state.release || {}).dev, up = state.up || {};
+    var cur = !d ? '<div class="empty-txt" style="padding:8px 0">아직 배포된 버전이 없습니다.</div>' :
+      '<div class="sgrid sg4"><div class="scard"><div class="slabel">최신 버전</div><div class="sval">' + esc(d.latest) + '</div><div class="ssub">' + (d.published ? '게시 중' : '미게시') + '</div></div>' +
+      '<div class="scard"><div class="slabel">최소 버전 (이하 필수 업데이트)</div><div class="sval">' + esc(d.min) + '</div></div>' +
+      '<div class="scard"><div class="slabel">배포 일시</div><div class="sval" style="font-size:16px">' + fmtDate(d.changed_at) + '</div><div class="ssub">' + esc(d.changed_at ? new Date(d.changed_at).toTimeString().slice(0, 5) : '') + '</div></div>' +
+      '<div class="scard"><div class="slabel">파일 검증값 (SHA-256)</div><div class="sval" style="font-size:13px;word-break:break-all">' + esc((d.sha256 || '').slice(0, 16)) + '…</div><div class="ssub">' + esc(d.message || '') + '</div></div></div>';
+    return '<div class="alert a-blue" style="margin-bottom:12px">Android Studio 로 빌드한 <b>duo-버전코드-debug.apk</b> 를 올리면, 기사 앱이 다음 실행 때 <b>앱 안에서 업데이트</b>를 안내합니다. ' +
+      '같은 PC(같은 서명키)에서 빌드한 APK 만 기존 앱 위에 설치됩니다.</div>' +
+      '<div class="card" style="padding:14px;margin-bottom:12px"><div class="card-title" style="margin-bottom:10px">현재 배포 (개발용 채널)</div>' + cur + '</div>' +
+      '<div class="card" style="padding:14px"><div class="card-title" style="margin-bottom:10px">새 버전 배포</div>' +
+      '<div class="fg"><label class="fl">APK 파일 *</label><input class="fi2" type="file" id="duo-apk-file" accept=".apk,application/vnd.android.package-archive" onchange="DUOA.apkPicked(this)"></div>' +
+      '<div style="display:flex;gap:10px;flex-wrap:wrap"><div class="fg" style="width:180px"><label class="fl">버전 코드 *</label><input class="fi2" id="duo-apk-ver" inputmode="numeric" value="' + esc(up.ver || '') + '" placeholder="파일 이름에서 자동"></div>' +
+      '<div class="fg" style="flex:1;min-width:220px"><label class="fl">안내 문구 (기사에게 표시)</label><input class="fi2" id="duo-apk-msg" maxlength="200" value="' + esc(up.msg || '') + '" placeholder="예) 오더 화면 개선"></div></div>' +
+      '<label style="display:flex;gap:8px;align-items:center;margin:4px 0 12px"><input type="checkbox" id="duo-apk-force"' + (up.force ? ' checked' : '') + '> <b>필수 업데이트</b> <span style="font-size:12px;color:var(--text2)">(체크하면 업데이트 전까지 앱 사용 불가)</span></label>' +
+      (up.status ? '<div class="alert ' + (up.error ? 'a-red' : 'a-blue') + '" style="margin-bottom:10px;word-break:break-all">' + esc(up.status) + '</div>' : '') +
+      '<button class="btn btn-p" id="duo-apk-go" onclick="DUOA.apkPublish()"' + (up.busy ? ' disabled' : '') + '>' + (up.busy ? '<span class="loading"></span> 업로드 중…' : '📦 업로드 후 배포') + '</button></div>';
+  }
+
   function draw() {
     var r = root(); if (!r) return;
     if (!me || !me.grant) {
@@ -268,7 +293,7 @@
     }
     var body = state.loading ? '<div class="empty"><div class="empty-txt"><span class="loading"></span> 불러오는 중...</div></div>'
       : state.err ? '<div class="alert a-red">' + esc(state.err) + '</div>'
-      : state.tab === 'grants' ? grantsHtml() : state.tab === 'revenue' ? revenueHtml() : membersHtml();
+      : state.tab === 'grants' ? grantsHtml() : state.tab === 'revenue' ? revenueHtml() : state.tab === 'release' ? releaseHtml() : membersHtml();
     var notice = state.notice ? '<div class="alert a-red" style="margin-bottom:12px;display:flex;gap:8px;align-items:flex-start"><div style="flex:1;word-break:break-all">⚠️ ' + esc(state.notice) + '</div><button class="btn btn-g btn-sm" onclick="DUOA.clearNotice()">닫기</button></div>' : '';
     r.innerHTML = header() + notice + tabs() + body;
   }
@@ -367,6 +392,40 @@
           after(j, j.ok ? '이용권 부여 · ' + won(j.data.amount) + ' · 만료 ' + fmtDate(j.data.license_expires_at) : '');
         });
       });
+  };
+  DUOA.apkPicked = function (input) {
+    var f = input.files && input.files[0]; state.up = state.up || {};
+    var m = f && /duo-(\d+)-/.exec(f.name);
+    if (m) { state.up.ver = m[1]; var v = document.getElementById('duo-apk-ver'); if (v) v.value = m[1]; }
+  };
+  DUOA.apkPublish = function () {
+    var f = (document.getElementById('duo-apk-file').files || [])[0];
+    var ver = parseInt(digits(document.getElementById('duo-apk-ver').value), 10);
+    var msg = document.getElementById('duo-apk-msg').value, force = document.getElementById('duo-apk-force').checked;
+    var up = state.up = { ver: ver || '', msg: msg, force: force };
+    var stop = function (t) { up.busy = false; up.error = true; up.status = t; draw(); };
+    if (!f) return stop('APK 파일을 선택하세요.');
+    if (!/\.apk$/i.test(f.name)) return stop('.apk 파일만 올릴 수 있습니다.');
+    if (!ver) return stop('버전 코드를 입력하세요. (파일 이름 duo-버전코드-debug.apk)');
+    var d = (state.release || {}).dev;
+    if (d && ver <= d.latest && !confirm('이미 배포된 버전(' + d.latest + ')보다 크지 않습니다. 계속할까요?')) return;
+    if (force && !confirm('필수 업데이트로 배포하면, 이전 버전 기사 앱은 업데이트 전까지 사용할 수 없습니다. 배포할까요?')) return;
+    if (typeof sb === 'undefined' || !sb.storage) return stop('업로드 모듈(Supabase)을 불러오지 못했습니다.');
+    up.busy = true; up.error = false; up.status = '업로드 준비 중… (' + (f.size / 1048576).toFixed(1) + ' MB)'; draw();
+    api({ action: 'apk_upload_url', version_code: ver, channel: 'dev' }).then(function (j) {
+      if (!j.ok) return stop(errMsg(j));
+      up.status = '업로드 중… (' + (f.size / 1048576).toFixed(1) + ' MB)'; draw();
+      return sb.storage.from(j.data.bucket).uploadToSignedUrl(j.data.path, j.data.token, f, { contentType: 'application/vnd.android.package-archive' })
+        .then(function (r) {
+          if (r.error) return stop('업로드 실패: ' + r.error.message);
+          up.status = '서버 검증 및 배포 중…'; draw();
+          return api({ action: 'apk_publish', version_code: ver, channel: 'dev', path: j.data.path, message: msg, force: force }).then(function (p) {
+            if (!p.ok) return stop(errMsg(p));
+            state.up = { status: '✅ 배포 완료 · 버전 ' + p.data.latest + ' · 최소 ' + p.data.min + ' · ' + (p.data.size / 1048576).toFixed(1) + ' MB · SHA-256 ' + p.data.sha256.slice(0, 16) + '…' };
+            toast('앱 업데이트를 배포했습니다', 'success'); loadRelease();
+          });
+        });
+    }).catch(function (e) { stop('오류: ' + e); });
   };
   DUOA.pick = function (k) { var r = document.querySelector('input[name="duo-kind"][value="' + k + '"]'); if (r) r.checked = true; };
   DUOA.revCsv = function () {
