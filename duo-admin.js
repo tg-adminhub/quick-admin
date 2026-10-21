@@ -40,6 +40,10 @@
   function won(n) { return (Number(n) || 0).toLocaleString('ko-KR') + '원'; }
   function uuid() { return (crypto.randomUUID ? crypto.randomUUID() : Date.now().toString(36) + Math.random().toString(36).slice(2) + Math.random().toString(36).slice(2)); }
   function toast(m, t) { try { showToast(m, t || 'info'); } catch (e) { } }
+  // 서버 오류 메시지 + 원인(detail) — 원인 파악용
+  // 실패 시 화면 위에 남는 오류 배너 (토스트는 2.5초 뒤 사라지므로)
+  function fail(j) { state.notice = errMsg(j); toast(state.notice, 'error'); draw(); }
+  function errMsg(j) { return (j.message || '실패했습니다.') + (j.detail ? ' [' + j.detail + ']' : '') + (j.code && !j.detail ? ' (' + j.code + ')' : ''); }
   function root() { return document.getElementById('duo-root'); }
 
   // ---------- 세션 ----------
@@ -102,7 +106,7 @@
     var st = state.tab === 'pending' ? 'pending' : (state.filter === 'active' ? 'all' : state.filter);
     return api({ action: 'members', status: st }).then(function (j) {
       state.loading = false;
-      if (!j.ok) { state.err = j.message || '불러오기 실패'; state.list = []; }
+      if (!j.ok) { state.err = errMsg(j); state.list = []; }
       else state.list = j.data || [];
       draw();
     });
@@ -265,7 +269,8 @@
     var body = state.loading ? '<div class="empty"><div class="empty-txt"><span class="loading"></span> 불러오는 중...</div></div>'
       : state.err ? '<div class="alert a-red">' + esc(state.err) + '</div>'
       : state.tab === 'grants' ? grantsHtml() : state.tab === 'revenue' ? revenueHtml() : membersHtml();
-    r.innerHTML = header() + tabs() + body;
+    var notice = state.notice ? '<div class="alert a-red" style="margin-bottom:12px;display:flex;gap:8px;align-items:flex-start"><div style="flex:1;word-break:break-all">⚠️ ' + esc(state.notice) + '</div><button class="btn btn-g btn-sm" onclick="DUOA.clearNotice()">닫기</button></div>' : '';
+    r.innerHTML = header() + notice + tabs() + body;
   }
 
   // ---------- 다이얼로그 ----------
@@ -284,11 +289,12 @@
     m.classList.add('open');
   }
   function dlgErr(msg) { var e = document.getElementById('duo-d-err'); if (e) { e.textContent = msg; e.style.display = 'block'; } var b = document.getElementById('duo-d-ok'); if (b) b.disabled = false; }
+  DUOA.clearNotice = function () { state.notice = ''; draw(); };
   DUOA.close = function () { var m = document.getElementById('duo-dialog'); if (m) m.classList.remove('open'); dlg = null; };
   DUOA.submit = function () { if (!dlg) return; var b = document.getElementById('duo-d-ok'); if (b) b.disabled = true; dlg.ok(); };
   function find(id) { return state.list.filter(function (m) { return m.id === id; })[0] || {}; }
   function after(j, okMsg) {
-    if (!j.ok) { dlgErr(j.message || '실패했습니다.'); toast(j.message || '실패', 'error'); return false; }
+    if (!j.ok) { dlgErr(errMsg(j)); fail(j); return false; }
     DUOA.close(); toast(okMsg, 'success'); load(); return true;
   }
 
@@ -303,7 +309,7 @@
   DUOA.review = function (id, approve) {
     var m = find(id);
     if (!confirm((m.name || '') + ' 님의 DUO 가입을 승인할까요?\n(이용권은 승인 후 따로 부여합니다)')) return;
-    api({ action: 'review', member_id: id, approve: true }).then(function (j) { if (!j.ok) return toast(j.message, 'error'); toast('승인했습니다', 'success'); load(); });
+    api({ action: 'review', member_id: id, approve: true }).then(function (j) { if (!j.ok) return fail(j); toast('승인했습니다', 'success'); load(); });
   };
   DUOA.openReject = function (id) {
     var m = find(id);
@@ -319,13 +325,13 @@
       });
     } else {
       if (!confirm((m.name || '') + ' 님의 정지를 해제할까요?\n(해제하면 남은 이용기간 동안 바로 앱을 쓸 수 있습니다)')) return;
-      api({ action: 'set_status', member_id: id, status: 'approved' }).then(function (j) { if (!j.ok) return toast(j.message, 'error'); toast('정지를 해제했습니다', 'success'); load(); });
+      api({ action: 'set_status', member_id: id, status: 'approved' }).then(function (j) { if (!j.ok) return fail(j); toast('정지를 해제했습니다', 'success'); load(); });
     }
   };
   DUOA.dual = function (id, approve) {
     var m = find(id);
     if (!confirm((m.name || '') + (approve ? ' 님을 듀얼 이용자로 승인할까요?' : ' 님의 듀얼 승인을 해제할까요?'))) return;
-    api({ action: 'dual', member_id: id, approve: approve }).then(function (j) { if (!j.ok) return toast(j.message, 'error'); toast(approve ? '듀얼 승인했습니다' : '듀얼 해제했습니다', 'success'); load(); });
+    api({ action: 'dual', member_id: id, approve: approve }).then(function (j) { if (!j.ok) return fail(j); toast(approve ? '듀얼 승인했습니다' : '듀얼 해제했습니다', 'success'); load(); });
   };
   function ymd(d) { return d.getFullYear() + '-' + ('0' + (d.getMonth() + 1)).slice(-2) + '-' + ('0' + d.getDate()).slice(-2); }
   DUOA.openLicense = function (id) {
@@ -398,11 +404,11 @@
     return g;
   }
   DUOA.saveGrant = function (id) {
-    api({ action: 'set_grant', target_admin_id: id, grant: grantFrom(id) }).then(function (j) { if (!j.ok) return toast(j.message, 'error'); toast('권한을 저장했습니다', 'success'); loadGrants(); });
+    api({ action: 'set_grant', target_admin_id: id, grant: grantFrom(id) }).then(function (j) { if (!j.ok) return fail(j); toast('권한을 저장했습니다', 'success'); loadGrants(); });
   };
   DUOA.revokeGrant = function (id) {
     if (!confirm('이 관리자의 DUO 권한을 모두 회수할까요?')) return;
-    api({ action: 'set_grant', target_admin_id: id, grant: null }).then(function (j) { if (!j.ok) return toast(j.message, 'error'); toast('권한을 회수했습니다', 'success'); loadGrants(); });
+    api({ action: 'set_grant', target_admin_id: id, grant: null }).then(function (j) { if (!j.ok) return fail(j); toast('권한을 회수했습니다', 'success'); loadGrants(); });
   };
 
   window.renderDuo = function () {
