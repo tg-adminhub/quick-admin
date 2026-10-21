@@ -272,7 +272,7 @@
   function releaseHtml() {
     var d = (state.release || {}).dev, up = state.up || {};
     var cur = !d ? '<div class="empty-txt" style="padding:8px 0">아직 배포된 버전이 없습니다.</div>' :
-      '<div class="sgrid sg4"><div class="scard"><div class="slabel">최신 버전</div><div class="sval">' + esc(d.name || d.latest) + '</div><div class="ssub">' + (d.published ? '게시 중' : '미게시') + ' · 내부 ' + esc(d.latest) + '</div></div>' +
+      '<div class="sgrid sg4"><div class="scard"><div class="slabel">최신 버전</div><div class="sval">' + esc(d.name ? 'V' + d.name : d.latest) + '</div><div class="ssub">' + (d.published ? '게시 중' : '미게시') + ' · 내부 ' + esc(d.latest) + '</div></div>' +
       '<div class="scard"><div class="slabel">최소 버전 (이하 필수 업데이트)</div><div class="sval">' + esc(d.min) + '</div></div>' +
       '<div class="scard"><div class="slabel">배포 일시</div><div class="sval" style="font-size:16px">' + fmtDate(d.changed_at) + '</div><div class="ssub">' + esc(d.changed_at ? new Date(d.changed_at).toTimeString().slice(0, 5) : '') + '</div></div>' +
       '<div class="scard"><div class="slabel">파일 검증값 (SHA-256)</div><div class="sval" style="font-size:13px;word-break:break-all">' + esc((d.sha256 || '').slice(0, 16)) + '…</div><div class="ssub">' + esc(d.message || '') + '</div></div></div>';
@@ -503,7 +503,7 @@
     if (!ver) return stop('버전 코드를 입력하세요. (파일 이름 duo-버전코드-debug.apk)');
     if (!/^\d+\.\d+\.\d{2,3}$/.test(vname)) return stop('표시 버전을 1.0.01 형식으로 입력하세요. (duo-version.txt 와 같게)');
     var d = (state.release || {}).dev;
-    if (d && d.name && cmpVer(vname, d.name) <= 0 && !confirm('표시 버전 ' + vname + ' 이(가) 이미 배포된 ' + d.name + ' 보다 크지 않습니다.\n(duo-version.txt 를 올리고 다시 빌드했나요?) 계속할까요?')) return;
+    if (d && d.name && cmpVer(vname, d.name) <= 0 && !confirm('표시 버전 V' + vname + ' 이(가) 이미 배포된 V' + d.name + ' 보다 크지 않습니다.\n(duo-version.txt 를 올리고 다시 빌드했나요?) 계속할까요?')) return;
     if (d && ver <= d.latest && !confirm('이미 배포된 버전(' + d.latest + ')보다 크지 않습니다. 계속할까요?')) return;
     if (force && !confirm('필수 업데이트로 배포하면, 이전 버전 기사 앱은 업데이트 전까지 사용할 수 없습니다. 배포할까요?')) return;
     if (typeof sb === 'undefined' || !sb.storage) return stop('업로드 모듈(Supabase)을 불러오지 못했습니다.');
@@ -517,7 +517,7 @@
           up.status = '서버 검증 및 배포 중…'; draw();
           return api({ action: 'apk_publish', version_code: ver, version_name: vname, channel: 'dev', path: j.data.path, message: msg, force: force }).then(function (p) {
             if (!p.ok) return stop(errMsg(p));
-            state.up = { status: '✅ 배포 완료 · 버전 ' + (p.data.name || vname) + ' (내부 ' + p.data.latest + ') · 최소 ' + p.data.min + ' · ' + (p.data.size / 1048576).toFixed(1) + ' MB · SHA-256 ' + p.data.sha256.slice(0, 16) + '…' };
+            state.up = { status: '✅ 배포 완료 · 버전 V' + (p.data.name || vname) + ' (내부 ' + p.data.latest + ') · 최소 ' + p.data.min + ' · ' + (p.data.size / 1048576).toFixed(1) + ' MB · SHA-256 ' + p.data.sha256.slice(0, 16) + '…' };
             toast('앱 업데이트를 배포했습니다', 'success'); loadRelease();
           });
         });
