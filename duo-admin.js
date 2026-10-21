@@ -276,7 +276,7 @@
       '<div class="scard"><div class="slabel">최소 버전 (이하 필수 업데이트)</div><div class="sval">' + esc(d.min) + '</div></div>' +
       '<div class="scard"><div class="slabel">배포 일시</div><div class="sval" style="font-size:16px">' + fmtDate(d.changed_at) + '</div><div class="ssub">' + esc(d.changed_at ? new Date(d.changed_at).toTimeString().slice(0, 5) : '') + '</div></div>' +
       '<div class="scard"><div class="slabel">파일 검증값 (SHA-256)</div><div class="sval" style="font-size:13px;word-break:break-all">' + esc((d.sha256 || '').slice(0, 16)) + '…</div><div class="ssub">' + esc(d.message || '') + '</div></div></div>';
-    return '<div class="alert a-blue" style="margin-bottom:12px">배포 전에 프로젝트 폴더의 <b>duo-version.txt</b> 번호를 하나 올리고(1.0.01 → 1.0.02) 빌드하세요. 빌드한 <b>duo-1.0.02-xxxxxx-debug.apk</b> 를 올리면, 기사 앱이 다음 실행 때 <b>앱 안에서 업데이트</b>를 안내합니다. ' +
+    return '<div class="alert a-blue" style="margin-bottom:12px">배포 전에 프로젝트 폴더의 <b>duo-version.txt</b> 번호를 하나 올리고(1.0.01 → 1.0.02) 빌드하세요. 빌드한 <b>DUO V1.0.02.apk</b> 를 올리면, 기사 앱이 다음 실행 때 <b>앱 안에서 업데이트</b>를 안내합니다. ' +
       '같은 PC(같은 서명키)에서 빌드한 APK 만 기존 앱 위에 설치됩니다.</div>' +
       '<div class="card" style="padding:14px;margin-bottom:12px"><div class="card-title" style="margin-bottom:10px">현재 배포 (개발용 채널)</div>' + cur + '</div>' +
       '<div class="card" style="padding:14px"><div class="card-title" style="margin-bottom:10px">새 버전 배포</div>' +
@@ -293,11 +293,12 @@
   // ── 화면(HTML) 무설치 업데이트 ──
   function uiVersionNow() { return 100000 + Math.floor((Date.now() - Date.parse('2026-01-01T00:00:00+09:00')) / 60000); }
   function uiReleaseHtml() {
-    var u = (state.uiPolicy || {}).dev, ui = state.ui || {}, apk = ((state.release || {}).dev || {}).latest || '';
+    var u = (state.uiPolicy || {}).dev, ui = state.ui || {}, rel = (state.release || {}).dev || {};
+    var apk = rel.name || codeToName(rel.latest) || '';
     return '<div class="card" style="padding:14px;margin-top:12px"><div class="card-title" style="margin-bottom:8px">🖼️ 화면 배포 (APK 없이 바로 반영)</div>' +
       '<div class="alert a-blue" style="margin-bottom:10px">duo-main.html / duo-login.html 을 고쳤을 때 사용합니다. 기사 앱은 <b>다음 실행 때 자동 반영</b>됩니다. ' +
       '형님 PC 의 <b>서명 키 파일</b>로 서명한 화면만 앱이 받아들입니다 (서버가 뚫려도 가짜 화면 불가).</div>' +
-      '<div style="font-size:13px;margin-bottom:10px">현재 화면 버전: <b>' + (u ? esc(u.version) + '</b> · ' + fmtDate(u.changed_at) + (u.message ? ' · ' + esc(u.message) : '') + ' · 최소 앱 ' + esc(u.min_apk) : '없음</b> (APK 기본 화면)') + '</div>' +
+      '<div style="font-size:13px;margin-bottom:10px">현재 화면 버전: <b>' + (u ? esc(u.version) + '</b> · ' + fmtDate(u.changed_at) + (u.message ? ' · ' + esc(u.message) : '') + ' · 대상 앱 V' + esc(codeToName(u.min_apk)) : '없음</b> (APK 기본 화면)') + '</div>' +
       '<details style="margin-bottom:12px"><summary style="cursor:pointer;font-weight:700">🔑 서명 키 (처음 1번)</summary><div style="padding:10px 0">' +
       '<ol style="margin:0 0 8px 18px;font-size:13px;line-height:1.7"><li>[서명 키 만들기] → 파일 2개가 PC 에 저장됩니다.</li>' +
       '<li><b>duo-ui-signing-key.json</b> = 개인키. PC 에 안전하게 보관 (누구에게도 보내지 말 것, 잃어버리면 새로 만들고 APK 다시 배포)</li>' +
@@ -305,7 +306,7 @@
       '<button class="btn btn-g btn-sm" onclick="DUOA.uiKeygen()">🔑 서명 키 만들기</button></div></details>' +
       '<div class="fg"><label class="fl">화면 파일 * (duo-main.html, duo-login.html 중 고친 것)</label><input class="fi2" type="file" id="duo-ui-files" accept=".html" multiple></div>' +
       '<div class="fg"><label class="fl">서명 키 파일 * (duo-ui-signing-key.json)</label><input class="fi2" type="file" id="duo-ui-key" accept=".json"></div>' +
-      '<div style="display:flex;gap:10px;flex-wrap:wrap"><div class="fg" style="width:200px"><label class="fl">최소 앱 버전</label><input class="fi2" id="duo-ui-minapk" inputmode="numeric" value="' + esc(ui.minApk || apk) + '"><div class="fd">이 버전 미만 앱엔 적용 안 함</div></div>' +
+      '<div style="display:flex;gap:10px;flex-wrap:wrap"><div class="fg" style="width:200px"><label class="fl">대상 앱 버전 *</label><input class="fi2" id="duo-ui-minapk" value="' + esc(ui.minApk || apk) + '" placeholder="1.0.01"><div class="fd">이 버전 앱에만 적용 (새 APK 를 깔면 APK 화면 사용)</div></div>' +
       '<div class="fg" style="flex:1;min-width:220px"><label class="fl">메모</label><input class="fi2" id="duo-ui-msg" maxlength="200" value="' + esc(ui.msg || '') + '" placeholder="예) 오더 카드 글자 크게"></div></div>' +
       (ui.status ? '<div class="alert ' + (ui.error ? 'a-red' : 'a-blue') + '" style="margin-bottom:10px;word-break:break-all">' + esc(ui.status) + '</div>' : '') +
       '<button class="btn btn-p" onclick="DUOA.uiPublish()"' + (ui.busy ? ' disabled' : '') + '>' + (ui.busy ? '<span class="loading"></span> 배포 중…' : '🖼️ 서명 후 화면 배포') + '</button></div>';
@@ -439,10 +440,12 @@
   DUOA.uiPublish = function () {
     var files = Array.prototype.slice.call(document.getElementById('duo-ui-files').files || []);
     var keyF = (document.getElementById('duo-ui-key').files || [])[0];
-    var minApk = parseInt(digits(document.getElementById('duo-ui-minapk').value), 10) || 1;
+    var target = document.getElementById('duo-ui-minapk').value.trim().replace(/^V/i, '');
+    var minApk = nameToCode(target);
     var msg = document.getElementById('duo-ui-msg').value;
-    var ui = state.ui = { minApk: minApk, msg: msg };
+    var ui = state.ui = { minApk: target, msg: msg };
     var stop = function (t) { ui.busy = false; ui.error = true; ui.status = t; draw(); };
+    if (!minApk) return stop('대상 앱 버전을 1.0.01 형식으로 입력하세요.');
     var allowed = ['duo-main.html', 'duo-login.html'];
     if (!files.length) return stop('화면 파일을 선택하세요.');
     var bad = files.filter(function (f) { return allowed.indexOf(f.name) < 0; });
@@ -476,14 +479,18 @@
       return api({ action: 'ui_publish', version: version, channel: 'dev', dir: dir, message: msg });
     }).then(function (p) {
       if (!p.ok) throw new Error(errMsg(p));
-      state.ui = { status: '✅ 화면 배포 완료 · 버전 ' + p.data.version + ' · ' + p.data.files.join(', ') + ' · 최소 앱 ' + p.data.min_apk + ' · 서명키 지문 ' + (pub ? pub.slice(-16) : '?') };
+      state.ui = { status: '✅ 화면 배포 완료 · 버전 ' + p.data.version + ' · ' + p.data.files.join(', ') + ' · 대상 앱 V' + codeToName(p.data.min_apk) + ' · 서명키 지문 ' + (pub ? pub.slice(-16) : '?') };
       toast('화면을 배포했습니다 (기사 앱 다음 실행 때 반영)', 'success'); loadRelease();
     }).catch(function (e) { stop(String(e.message || e)); });
   };
-  // 파일 이름: duo-1.0.02-522600-debug.apk (표시 버전-내부 번호) / 예전 형식 duo-522600-debug.apk
+  // 내부 번호 = 표시 버전에서 계산 (build.gradle 과 동일): 1.0.01 → 1100001
+  function nameToCode(n) { var m = /^(\d+)\.(\d+)\.(\d{2,3})$/.exec(n || ''); return m ? 1000000 + (+m[1]) * 100000 + (+m[2]) * 1000 + (+m[3]) : 0; }
+  function codeToName(c) { c = +c; if (!(c >= 1000000)) return String(c || ''); c -= 1000000; var pat = c % 1000, min = Math.floor(c / 1000) % 100, maj = Math.floor(c / 100000); return maj + '.' + min + '.' + (pat < 10 ? '0' + pat : pat); }
+  // 파일 이름: DUO V1.0.02.apk (브라우저가 'DUO V1.0.02 (1).apk' 로 바꿔도 인식) / 예전 형식 duo-522600-debug.apk
   DUOA.apkPicked = function (input) {
     var f = input.files && input.files[0]; state.up = state.up || {};
-    var m = f && (/duo-(\d+\.\d+\.\d{2,3})-(\d+)-/.exec(f.name) || /duo-()(\d+)-/.exec(f.name));
+    var n = f && /DUO V(\d+\.\d+\.\d{2,3})/i.exec(f.name);
+    var m = n ? [null, n[1], String(nameToCode(n[1]))] : (f && /duo-()(\d+)-/.exec(f.name));
     if (m) {
       state.up.ver = m[2]; state.up.name = m[1] || '';
       var v = document.getElementById('duo-apk-ver'); if (v) v.value = m[2];
