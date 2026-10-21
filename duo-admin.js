@@ -273,7 +273,7 @@
     var d = (state.release || {}).dev, up = state.up || {};
     var cur = !d ? '<div class="empty-txt" style="padding:8px 0">아직 배포된 버전이 없습니다.</div>' :
       '<div class="sgrid sg4"><div class="scard"><div class="slabel">최신 버전</div><div class="sval">' + esc(d.name ? 'V' + d.name : d.latest) + '</div><div class="ssub">' + (d.published ? '게시 중' : '미게시') + ' · 내부 ' + esc(d.latest) + '</div></div>' +
-      '<div class="scard"><div class="slabel">최소 버전 (이하 필수 업데이트)</div><div class="sval">' + esc(d.min) + '</div></div>' +
+      '<div class="scard"><div class="slabel">최소 버전 (미만은 필수 업데이트)</div><div class="sval">' + esc(d.min >= 1000000 ? 'V' + codeToName(d.min) : d.min) + '</div><div class="ssub">내부 ' + esc(d.min) + '</div></div>' +
       '<div class="scard"><div class="slabel">배포 일시</div><div class="sval" style="font-size:16px">' + fmtDate(d.changed_at) + '</div><div class="ssub">' + esc(d.changed_at ? new Date(d.changed_at).toTimeString().slice(0, 5) : '') + '</div></div>' +
       '<div class="scard"><div class="slabel">파일 검증값 (SHA-256)</div><div class="sval" style="font-size:13px;word-break:break-all">' + esc((d.sha256 || '').slice(0, 16)) + '…</div><div class="ssub">' + esc(d.message || '') + '</div></div></div>';
     return '<div class="alert a-blue" style="margin-bottom:12px">배포 전에 프로젝트 폴더의 <b>duo-version.txt</b> 번호를 하나 올리고(1.0.01 → 1.0.02) 빌드하세요. 빌드한 <b>DUO V1.0.02.apk</b> 를 올리면, 기사 앱이 다음 실행 때 <b>앱 안에서 업데이트</b>를 안내합니다. ' +
