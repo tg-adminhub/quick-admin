@@ -124,7 +124,10 @@
   }
   function loadRelease() {
     state.loading = true; draw();
-    return api({ action: 'release_get' }).then(function (j) { state.loading = false; state.release = j.ok ? j.data : null; state.err = j.ok ? '' : errMsg(j); draw(); });
+    return Promise.all([api({ action: 'release_get' }), api({ action: 'ui_get' })]).then(function (rs) {
+      var j = rs[0]; state.loading = false; state.release = j.ok ? j.data : null; state.err = j.ok ? '' : errMsg(j);
+      state.uiPolicy = rs[1].ok ? (rs[1].data || {}) : null; draw();
+    });
   }
   function load() {
     if (state.tab === 'release') return loadRelease();
@@ -282,8 +285,35 @@
       '<div class="fg" style="flex:1;min-width:220px"><label class="fl">안내 문구 (기사에게 표시)</label><input class="fi2" id="duo-apk-msg" maxlength="200" value="' + esc(up.msg || '') + '" placeholder="예) 오더 화면 개선"></div></div>' +
       '<label style="display:flex;gap:8px;align-items:center;margin:4px 0 12px"><input type="checkbox" id="duo-apk-force"' + (up.force ? ' checked' : '') + '> <b>필수 업데이트</b> <span style="font-size:12px;color:var(--text2)">(체크하면 업데이트 전까지 앱 사용 불가)</span></label>' +
       (up.status ? '<div class="alert ' + (up.error ? 'a-red' : 'a-blue') + '" style="margin-bottom:10px;word-break:break-all">' + esc(up.status) + '</div>' : '') +
-      '<button class="btn btn-p" id="duo-apk-go" onclick="DUOA.apkPublish()"' + (up.busy ? ' disabled' : '') + '>' + (up.busy ? '<span class="loading"></span> 업로드 중…' : '📦 업로드 후 배포') + '</button></div>';
+      '<button class="btn btn-p" id="duo-apk-go" onclick="DUOA.apkPublish()"' + (up.busy ? ' disabled' : '') + '>' + (up.busy ? '<span class="loading"></span> 업로드 중…' : '📦 업로드 후 배포') + '</button></div>' +
+      uiReleaseHtml();
   }
+
+  // ── 화면(HTML) 무설치 업데이트 ──
+  function uiVersionNow() { return 100000 + Math.floor((Date.now() - Date.parse('2026-01-01T00:00:00+09:00')) / 60000); }
+  function uiReleaseHtml() {
+    var u = (state.uiPolicy || {}).dev, ui = state.ui || {}, apk = ((state.release || {}).dev || {}).latest || '';
+    return '<div class="card" style="padding:14px;margin-top:12px"><div class="card-title" style="margin-bottom:8px">🖼️ 화면 배포 (APK 없이 바로 반영)</div>' +
+      '<div class="alert a-blue" style="margin-bottom:10px">duo-main.html / duo-login.html 을 고쳤을 때 사용합니다. 기사 앱은 <b>다음 실행 때 자동 반영</b>됩니다. ' +
+      '형님 PC 의 <b>서명 키 파일</b>로 서명한 화면만 앱이 받아들입니다 (서버가 뚫려도 가짜 화면 불가).</div>' +
+      '<div style="font-size:13px;margin-bottom:10px">현재 화면 버전: <b>' + (u ? esc(u.version) + '</b> · ' + fmtDate(u.changed_at) + (u.message ? ' · ' + esc(u.message) : '') + ' · 최소 앱 ' + esc(u.min_apk) : '없음</b> (APK 기본 화면)') + '</div>' +
+      '<details style="margin-bottom:12px"><summary style="cursor:pointer;font-weight:700">🔑 서명 키 (처음 1번)</summary><div style="padding:10px 0">' +
+      '<ol style="margin:0 0 8px 18px;font-size:13px;line-height:1.7"><li>[서명 키 만들기] → 파일 2개가 PC 에 저장됩니다.</li>' +
+      '<li><b>duo-ui-signing-key.json</b> = 개인키. PC 에 안전하게 보관 (누구에게도 보내지 말 것, 잃어버리면 새로 만들고 APK 다시 배포)</li>' +
+      '<li><b>duo-ui-pubkey.txt</b> = 공개키. DUO_LIVE_DEV 프로젝트 폴더(맨 위)에 넣고 APK 빌드 → 위 [앱 배포] 로 배포</li></ol>' +
+      '<button class="btn btn-g btn-sm" onclick="DUOA.uiKeygen()">🔑 서명 키 만들기</button></div></details>' +
+      '<div class="fg"><label class="fl">화면 파일 * (duo-main.html, duo-login.html 중 고친 것)</label><input class="fi2" type="file" id="duo-ui-files" accept=".html" multiple></div>' +
+      '<div class="fg"><label class="fl">서명 키 파일 * (duo-ui-signing-key.json)</label><input class="fi2" type="file" id="duo-ui-key" accept=".json"></div>' +
+      '<div style="display:flex;gap:10px;flex-wrap:wrap"><div class="fg" style="width:200px"><label class="fl">최소 앱 버전</label><input class="fi2" id="duo-ui-minapk" inputmode="numeric" value="' + esc(ui.minApk || apk) + '"><div class="fd">이 버전 미만 앱엔 적용 안 함</div></div>' +
+      '<div class="fg" style="flex:1;min-width:220px"><label class="fl">메모</label><input class="fi2" id="duo-ui-msg" maxlength="200" value="' + esc(ui.msg || '') + '" placeholder="예) 오더 카드 글자 크게"></div></div>' +
+      (ui.status ? '<div class="alert ' + (ui.error ? 'a-red' : 'a-blue') + '" style="margin-bottom:10px;word-break:break-all">' + esc(ui.status) + '</div>' : '') +
+      '<button class="btn btn-p" onclick="DUOA.uiPublish()"' + (ui.busy ? ' disabled' : '') + '>' + (ui.busy ? '<span class="loading"></span> 배포 중…' : '🖼️ 서명 후 화면 배포') + '</button></div>';
+  }
+  function b64(buf) { var s = '', b = new Uint8Array(buf); for (var i = 0; i < b.length; i++) s += String.fromCharCode(b[i]); return btoa(s); }
+  function hex(buf) { return Array.prototype.map.call(new Uint8Array(buf), function (x) { return ('0' + x.toString(16)).slice(-2); }).join(''); }
+  function saveFile(name, text) { var a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([text], { type: 'application/octet-stream' })); a.download = name; document.body.appendChild(a); a.click(); a.remove(); }
+  function readText(f) { return new Promise(function (ok, no) { var r = new FileReader(); r.onload = function () { ok(r.result); }; r.onerror = no; r.readAsText(f); }); }
+  function readBuf(f) { return new Promise(function (ok, no) { var r = new FileReader(); r.onload = function () { ok(r.result); }; r.onerror = no; r.readAsArrayBuffer(f); }); }
 
   function draw() {
     var r = root(); if (!r) return;
@@ -392,6 +422,62 @@
           after(j, j.ok ? '이용권 부여 · ' + won(j.data.amount) + ' · 만료 ' + fmtDate(j.data.license_expires_at) : '');
         });
       });
+  };
+  DUOA.uiKeygen = function () {
+    if (!confirm('새 서명 키를 만들까요?\n이미 키를 쓰고 있다면, 새 키로 바꾸는 순간 기존 앱은 새 공개키가 든 APK 를 받기 전까지 화면 업데이트를 받지 않습니다.')) return;
+    crypto.subtle.generateKey({ name: 'ECDSA', namedCurve: 'P-256' }, true, ['sign', 'verify']).then(function (kp) {
+      return Promise.all([crypto.subtle.exportKey('jwk', kp.privateKey), crypto.subtle.exportKey('spki', kp.publicKey)]);
+    }).then(function (r) {
+      var pub = b64(r[1]);
+      saveFile('duo-ui-signing-key.json', JSON.stringify({ kind: 'DUO UI signing key (PRIVATE - do not share)', created: new Date().toISOString(), jwk: r[0], pub: pub }, null, 1));
+      setTimeout(function () { saveFile('duo-ui-pubkey.txt', pub); }, 400);
+      toast('서명 키 파일 2개를 저장했습니다', 'success');
+      state.ui = { status: '🔑 키 생성 완료 · 공개키 지문 ' + pub.slice(-16) + ' → duo-ui-pubkey.txt 를 프로젝트 폴더에 넣고 APK 빌드·배포하세요.' }; draw();
+    }).catch(function (e) { state.ui = { error: true, status: '키 생성 실패: ' + e }; draw(); });
+  };
+  DUOA.uiPublish = function () {
+    var files = Array.prototype.slice.call(document.getElementById('duo-ui-files').files || []);
+    var keyF = (document.getElementById('duo-ui-key').files || [])[0];
+    var minApk = parseInt(digits(document.getElementById('duo-ui-minapk').value), 10) || 1;
+    var msg = document.getElementById('duo-ui-msg').value;
+    var ui = state.ui = { minApk: minApk, msg: msg };
+    var stop = function (t) { ui.busy = false; ui.error = true; ui.status = t; draw(); };
+    var allowed = ['duo-main.html', 'duo-login.html'];
+    if (!files.length) return stop('화면 파일을 선택하세요.');
+    var bad = files.filter(function (f) { return allowed.indexOf(f.name) < 0; });
+    if (bad.length) return stop('파일 이름은 duo-main.html 또는 duo-login.html 이어야 합니다: ' + bad.map(function (f) { return f.name; }).join(', '));
+    if (!keyF) return stop('서명 키 파일(duo-ui-signing-key.json)을 선택하세요.');
+    var version = uiVersionNow(), cur = (state.uiPolicy || {}).dev;
+    if (cur && version <= cur.version) version = cur.version + 1;
+    ui.busy = true; ui.error = false; ui.status = '서명 중…'; draw();
+    var key, pub, list = [], bufs = {};
+    readText(keyF).then(function (t) {
+      var k = JSON.parse(t); if (!k.jwk || !k.jwk.d) throw new Error('서명 키 파일이 아닙니다');
+      pub = k.pub || '';
+      return crypto.subtle.importKey('jwk', k.jwk, { name: 'ECDSA', namedCurve: 'P-256' }, false, ['sign']);
+    }).then(function (k) {
+      key = k;
+      return Promise.all(files.map(function (f) { return readBuf(f).then(function (b) { bufs[f.name] = b; return crypto.subtle.digest('SHA-256', b).then(function (h) { list.push({ name: f.name, sha256: hex(h), size: b.byteLength }); }); }); }));
+    }).then(function () {
+      list.sort(function (a, b) { return a.name < b.name ? -1 : 1; });
+      var manifest = JSON.stringify({ version: version, minApk: minApk, files: list, created: new Date().toISOString() });
+      return crypto.subtle.sign({ name: 'ECDSA', hash: 'SHA-256' }, key, new TextEncoder().encode(manifest)).then(function (sig) { return { manifest: manifest, sig: b64(sig) }; });
+    }).then(function (signed) {
+      ui.status = '업로드 중…'; draw();
+      return api({ action: 'ui_upload_urls', version: version, channel: 'dev', files: list.map(function (f) { return f.name; }) }).then(function (j) {
+        if (!j.ok) throw new Error(errMsg(j));
+        var u = j.data.uploads, put = function (name, body, type) { return sb.storage.from(j.data.bucket).uploadToSignedUrl(u[name].path, u[name].token, new Blob([body], { type: type })).then(function (r) { if (r.error) throw new Error(name + ' 업로드 실패: ' + r.error.message); }); };
+        return Promise.all([put('manifest.json', signed.manifest, 'application/json'), put('manifest.sig', signed.sig, 'text/plain')]
+          .concat(list.map(function (f) { return put(f.name, bufs[f.name], 'text/html'); }))).then(function () { return j.data.dir; });
+      });
+    }).then(function (dir) {
+      ui.status = '서버 확인 및 게시 중…'; draw();
+      return api({ action: 'ui_publish', version: version, channel: 'dev', dir: dir, message: msg });
+    }).then(function (p) {
+      if (!p.ok) throw new Error(errMsg(p));
+      state.ui = { status: '✅ 화면 배포 완료 · 버전 ' + p.data.version + ' · ' + p.data.files.join(', ') + ' · 최소 앱 ' + p.data.min_apk + ' · 서명키 지문 ' + (pub ? pub.slice(-16) : '?') };
+      toast('화면을 배포했습니다 (기사 앱 다음 실행 때 반영)', 'success'); loadRelease();
+    }).catch(function (e) { stop(String(e.message || e)); });
   };
   DUOA.apkPicked = function (input) {
     var f = input.files && input.files[0]; state.up = state.up || {};
