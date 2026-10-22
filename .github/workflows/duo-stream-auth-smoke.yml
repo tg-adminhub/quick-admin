@@ -1,0 +1,37 @@
+name: DUO stream authorization smoke
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/duo-stream-auth-smoke.yml'
+permissions:
+  contents: read
+jobs:
+  verify-deny-boundary:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - name: Check live authorization endpoint without credentials
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import json
+          import urllib.request
+          import urllib.error
+          URL = 'https://pvdhdnvbgytfaydyyuat.supabase.co/functions/v1/duo-stream-authorize'
+          cases = [('POST', {}, 401, 'INVALID_SESSION'), ('GET', None, 405, 'METHOD_NOT_ALLOWED')]
+          for method, body, expected_status, expected_code in cases:
+              data = None if body is None else json.dumps(body).encode()
+              request = urllib.request.Request(URL, method=method, data=data, headers={'Content-Type':'application/json'})
+              try:
+                  with urllib.request.urlopen(request, timeout=20) as response:
+                      status, payload = response.status, response.read(32769)
+              except urllib.error.HTTPError as error:
+                  status, payload = error.code, error.read(32769)
+              assert len(payload) <= 32768, 'Response too large'
+              parsed = json.loads(payload)
+              assert status == expected_status, f'{method}: HTTP {status}; expected {expected_status}'
+              assert parsed.get('ok') is False and parsed.get('code') == expected_code, f'{method}: unexpected error format'
+              print(f'{method}: HTTP {status}, {expected_code}: PASS')
+          print('LIVE_AUTH_NEGATIVE_CHECKS_PASS: not an upstream order test')
+          PY
