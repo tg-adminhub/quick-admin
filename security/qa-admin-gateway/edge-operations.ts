@@ -45,7 +45,8 @@ export async function protectedRpc(name,args){
   const allowed=new Set([
     'qa_svc_admin_profile',
     'qa_svc_member_maintenance',
-    'qa_svc_payment_review'
+    'qa_svc_payment_review',
+    'qa_svc_admin_config'
   ]);
   if(!ready||!allowed.has(name))throw Error('RPC_NOT_CONFIGURED');
   const res=await fetch(base+'/rest/v1/rpc/'+name,{
