@@ -88,3 +88,20 @@ Work completed on the GitHub development branch only. No production Supabase or 
 **Important:** These are un-deployed development drafts, not a replacement for the existing working UI. The browser still directly performs privileged database operations; the new administrator Auth identities and private mapping are not enrolled. Do not merge PR #2 until the entire auth/CRUD migration, RLS permission review, migration rollback plan and real deployment validation are approved. The existing QUICK ADMIN, ZAPGO-V6 and DUO receiver have not been modified.
 
 The user elected not to create a paid Supabase test branch. Disposable CI PostgreSQL tests are useful but do **not** reproduce Supabase Auth, PostgREST routing, live RLS exposure, or the existing operational data.
+
+## V2.17 — restricted organization/admin/settings APIs (GitHub branch only)
+
+**No Supabase paid branch, production DB write, RLS change, or Edge deployment.**
+
+- `config-core.mjs` / `config-core.test.mjs`: POST-only dev administrator configuration gate. Requires a newly verified Supabase Auth bearer plus an enabled private admin identity mapping. Only `branch.rename`, `admin.rename`, and `setting.toggle` are accepted. No password/role/auth-UUID/organization-parent updates, deletes, arbitrary configuration keys, or dangerous HTML markup. Each update requires an expected old value and a unique idempotency key.
+- `config-index.ts`: undeployed Edge adapter calling only `qa_svc_admin_profile` and `qa_svc_admin_config` with the server-held service credential.
+- `SQL_CONFIG_REVIEW_ONLY.sql`: transactional draft RPC. Row locks, compare-and-swap old values, in-transaction audit record, idempotency replays, and explicit deny to PUBLIC/anon/authenticated.
+- `secure-config-client.mjs` and its test: isolated browser adapter that sends only verified-token requests to a fixed endpoint; no direct table access.
+- `read-core.mjs`, `SQL_READ_REVIEW_ONLY.sql`, and the browser adapter now also cover `admin_directory` and `setting_flags`. **Only dev** can read these. Admin listing excludes `password`; settings listing exposes only the two boolean keys `maintenance_mode` and `payment_visible`, not `tg_bot_token` or payment accounts.
+- `sql-config-local-test.sql` now includes disposable PostgreSQL tests for the read/write SQL, stale updates, role restrictions, replay, and nonsecret response fields. This is not proof of real Supabase Auth/PostgREST behavior.
+
+**Deployment blocker remains:** existing legacy QUICK ADMIN still authenticates through public.admins and makes privileged direct browser DB calls. Do not merge until new Auth re-enrollment, full screen migration, audited role-scoped SQL, RLS/grant changes, integration testing and rollback are complete.
+
+### GitHub default-branch hygiene
+
+A static test source file was briefly created on `main` by mistake, then immediately deleted and added to this development branch. A GitHub compare against the original `main` baseline commit showed an empty final file diff (two add/revert commits remain in history). No default-branch application file, operational database or deployed API was intentionally changed.
