@@ -15,7 +15,12 @@ const PATHS=Object.freeze({
   maintenance:'qa-member-maintenance',
   paymentReview:'qa-payment-review'
 });
-const RESOURCES=new Set(['members','payments','branches']);
+const SAFE_FIELDS=Object.freeze({
+  members:['id','username','real_name','status','branch_id','app_type','license_expires_at'],
+  payments:['id','user_id','amount','status','created_at','branch_id'],
+  branches:['id','name','parent_id','type']
+});
+const RESOURCES=new Set(Object.keys(SAFE_FIELDS));
 const UUID=/^[a-f0-9]{8}-[a-f0-9]{4}-[1-8][a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/i;
 const TOKEN=/^[a-zA-Z0-9_-]+\.[a-zA-Z0-9_-]+\.[a-zA-Z0-9_-]+$/;
 const ACTIONS=Object.freeze({
@@ -98,7 +103,12 @@ function validateList(data,resource,limit,offset){
   for(const row of data.items){
     if(!isObject(row)||!isPositiveInt(row.id))throw new GatewayError('INVALID_GATEWAY_RESPONSE');
   }
-  return Object.freeze(data.items.map(row=>Object.freeze({...row})));
+  return Object.freeze(data.items.map(row=>{
+    const safe={};
+    for(const field of SAFE_FIELDS[resource])
+      if(Object.hasOwn(row,field))safe[field]=row[field];
+    return Object.freeze(safe);
+  }));
 }
 
 export function createProtectedAdminClient({
