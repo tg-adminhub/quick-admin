@@ -33,3 +33,32 @@ jobs:
         run: node --test security/qa-admin-gateway/review-core.test.mjs
       - name: Check exposed client DB call baseline
         run: node security/audit-client.mjs --guardrails
+
+  sql-isolated-postgres:
+    name: Disposable PostgreSQL SQL regression (synthetic data)
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: qa_security_mock
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd="pg_isready -U postgres -d qa_security_mock"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=12
+    env:
+      PGHOST: localhost
+      PGPORT: "5432"
+      PGUSER: postgres
+      PGPASSWORD: postgres
+      PGDATABASE: qa_security_mock
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Run synthetic identity and member review SQL tests
+        run: psql -X -v ON_ERROR_STOP=1 -f security/qa-admin-gateway/sql-local-test.sql
