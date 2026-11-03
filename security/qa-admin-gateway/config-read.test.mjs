@@ -4,7 +4,7 @@ import {handleAdminRead} from './read-core.mjs';
 import {createProtectedAdminClient} from '../ui/secure-admin-client.mjs';
 
 const UID='00000000-0000-4000-8000-000000000001';
-const URL='https://example.supabase.co/functions/v1/qa-admin-read';
+const ENDPOINT='https://example.supabase.co/functions/v1/qa-admin-read';
 const DEV={enabled:true,adminId:1,username:'dev',displayName:'Developer',role:'dev',branchId:null,visibleBranchIds:null};
 const BRANCH={enabled:true,adminId:2,username:'branch',displayName:'Manager',role:'branch',branchId:3,visibleBranchIds:[3]};
 const SAMPLE_ADMINS=[
@@ -16,7 +16,7 @@ const SAMPLE_FLAGS=[
   {id:2,key:'maintenance_mode',value:'false',updated_at:'2026-11-03T00:00:00Z',secret:'NEVER'}
 ];
 function req(resource) {
-  return new Request(URL+'?resource='+resource,{headers:{
+  return new Request(ENDPOINT+'?resource='+resource,{headers:{
     origin:'https://tg-adminhub.github.io',authorization:'Bearer a.b.c'
   }});
 }
