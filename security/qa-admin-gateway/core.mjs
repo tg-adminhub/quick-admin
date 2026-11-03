@@ -6,8 +6,8 @@
  * - verifyBearer: verifies a Supabase Auth JWT on the server
  * - loadAdmin: reads a protected, service-role-only RPC by verified Auth user ID
  */
-const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-const TOKEN = /^Bearer ([A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+)$/;
+export const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+export const TOKEN = /^Bearer ([A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+)$/;
 const ROLES = new Set(['dev', 'master', 'branch', 'sub']);
 export const ALLOWED_ORIGIN = 'https://tg-adminhub.github.io';
 
@@ -26,7 +26,7 @@ function reply(status, payload, origin, allowedOrigin) {
     status, headers: {'Content-Type': 'application/json; charset=utf-8', ...headers(origin, allowedOrigin)}
   });
 }
-function verifiedProfile(value) {
+export function verifiedProfile(value) {
   if (!value || typeof value !== 'object' || value.enabled !== true) return null;
   if (!Number.isSafeInteger(value.adminId) || value.adminId < 1) return null;
   if (!ROLES.has(value.role)) return null;
