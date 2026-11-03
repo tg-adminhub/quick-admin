@@ -88,3 +88,11 @@ test('pilot page clearly warns that it is not connected to production',()=>{
   assert.doesNotMatch(script,/\bfetch\s*\(/);
   assert.doesNotMatch(transport,/\bfetch\s*\(/);
 });
+
+
+test('original QUICK ADMIN page does not import synthetic demo transport or pilot',()=>{
+  const legacy=readFileSync(new URL('../../index.html',import.meta.url),'utf8');
+  assert.doesNotMatch(legacy,/synthetic-transport\.mjs/);
+  assert.doesNotMatch(legacy,/secure-pilot\.mjs/);
+  assert.doesNotMatch(legacy,/secure-pilot\.html/);
+});
