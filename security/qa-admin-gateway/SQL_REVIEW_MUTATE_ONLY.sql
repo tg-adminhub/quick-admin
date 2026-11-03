@@ -88,8 +88,7 @@ BEGIN
     IF v_prev.auth_user_id<>p_auth_user_id
        OR v_prev.member_id<>p_member_id
        OR v_prev.action<>p_action
-       OR v_prev.reason IS DISTINCT FROM
-          CASE WHEN p_reason IS NULL THEN NULL ELSE btrim(p_reason) END THEN
+       OR v_prev.reason IS DISTINCT FROM NULLIF(btrim(p_reason),'') THEN
       RAISE EXCEPTION 'idempotency_conflict' USING ERRCODE='23505';
     END IF;
     RETURN jsonb_build_object('memberId',v_prev.member_id,
