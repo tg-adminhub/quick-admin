@@ -54,3 +54,11 @@ node security/audit-client.mjs --guardrails
 ## Recovery
 
 Only the `security/qa-auth-hardening-v212` branch is edited. Do not merge the draft PR if authentication or core operational flows fail. If a later deployment requires rollback, restore the prior verified web release and backend configuration; do not roll back by exposing more anonymous database privileges.
+
+## V2.16 isolated browser pilot (2026-11-03)
+
+A separate frontend API adapter and synthetic-only Korean pilot have been added under `security/ui/` without importing them from the existing `index.html`. The adapter routes only to allowlisted Edge endpoints, obtains a Supabase Auth access JWT via an injected auth session provider, projects safe fields, and prepares immutable, idempotency-keyed action intents. No `service_role` key or browser-controlled admin ID is used. The pilot is hardwired to in-memory fake users and payments and makes **no production network requests**.
+
+The original QUICK ADMIN cannot yet be replaced: the old `doLogin` still uses the public `admins` table, `loadAllData` needs fields intentionally omitted from secure limited read endpoints, and management screens such as settings, organization and admin accounts lack protected APIs. The secure pilot is **not** a live authenticated administrator interface. It is intentionally not published by GitHub Pages.
+
+Tests: `node --test security/ui/secure-admin-client.test.mjs security/ui/secure-pilot.test.mjs`; GitHub Actions runs these alongside all previous Node checks and disposable PostgreSQL tests. Do not merge or deploy without completing account enrollment, backend policies, UI compatibility, and live end-to-end verification.
