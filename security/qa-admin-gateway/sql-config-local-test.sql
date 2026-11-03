@@ -185,7 +185,7 @@ END $$;
 \ir SQL_READ_REVIEW_ONLY.sql
 SELECT set_config('request.jwt.claim.role','service_role',false);
 
-DO $
+DO $$
 DECLARE a jsonb;f jsonb;
 BEGIN
   a:=public.qa_svc_admin_read(
@@ -202,9 +202,9 @@ BEGIN
      f::text LIKE '%tg_bot_token%' OR
      f::text LIKE '%payment_account%' THEN
     RAISE EXCEPTION 'SETTING_FLAGS_LEAK'; END IF;
-END $;
+END $$;
 
-DO $
+DO $$
 DECLARE denied boolean:=false;
 BEGIN
   BEGIN
@@ -213,9 +213,9 @@ BEGIN
   EXCEPTION WHEN insufficient_privilege THEN denied:=true;
   END;
   IF NOT denied THEN RAISE EXCEPTION 'BRANCH_ADMIN_READ_DIRECTORY_ALLOWED'; END IF;
-END $;
+END $$;
 
-DO $
+DO $$
 DECLARE denied boolean:=false;
 BEGIN
   BEGIN
@@ -224,9 +224,9 @@ BEGIN
   EXCEPTION WHEN insufficient_privilege THEN denied:=true;
   END;
   IF NOT denied THEN RAISE EXCEPTION 'BRANCH_ADMIN_READ_FLAGS_ALLOWED'; END IF;
-END $;
+END $$;
 
-DO $
+DO $$
 BEGIN
   IF has_function_privilege('anon',
      'public.qa_svc_admin_read(uuid,text,integer,integer)','EXECUTE')
@@ -236,7 +236,7 @@ BEGIN
      'public.qa_svc_admin_read(uuid,text,integer,integer)','EXECUTE') THEN
     RAISE EXCEPTION 'ADMIN_DIRECTORY_RPC_GRANTS_BAD';
   END IF;
-END $;
+END $$;
 
 \echo QA_ADMIN_CONFIG_READ_SQL_PASS
 
