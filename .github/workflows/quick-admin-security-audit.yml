@@ -31,6 +31,8 @@ jobs:
         run: node --test security/qa-admin-gateway/read-core.test.mjs
       - name: Test dev-only member approval/rejection security (mocked)
         run: node --test security/qa-admin-gateway/review-core.test.mjs
+      - name: Test member pause/resume and device reset authorization (mocked)
+        run: node --test security/qa-admin-gateway/maintenance-core.test.mjs
       - name: Check exposed client DB call baseline
         run: node security/audit-client.mjs --guardrails
 
