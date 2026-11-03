@@ -1,0 +1,29 @@
+name: QUICK ADMIN security audit
+
+on:
+  pull_request:
+    paths:
+      - index.html
+      - security/**
+      - .github/workflows/quick-admin-security-audit.yml
+  push:
+    branches:
+      - security/qa-auth-hardening-v212
+
+permissions:
+  contents: read
+
+jobs:
+  security-regression:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Verify static security regression tests
+        run: node --test security/audit-client.test.mjs
+      - name: Check exposed client DB call baseline
+        run: node security/audit-client.mjs --guardrails
