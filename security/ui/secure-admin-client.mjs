@@ -18,7 +18,9 @@ const PATHS=Object.freeze({
 const SAFE_FIELDS=Object.freeze({
   members:['id','username','real_name','status','branch_id','app_type','license_expires_at'],
   payments:['id','user_id','amount','status','created_at','branch_id'],
-  branches:['id','name','parent_id','type']
+  branches:['id','name','parent_id','type'],
+  admin_directory:['id','username','name','role','branch_id'],
+  setting_flags:['id','key','value','updated_at']
 });
 const RESOURCES=new Set(Object.keys(SAFE_FIELDS));
 const UUID=/^[a-f0-9]{8}-[a-f0-9]{4}-[1-8][a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/i;
