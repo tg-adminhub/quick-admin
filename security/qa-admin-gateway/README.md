@@ -72,3 +72,19 @@ The user chose **not** to create a paid Supabase development branch. Development
 GitHub Actions job `security-regression` and disposable `sql-isolated-postgres` passed after the SQL syntax fix. These do **not** test Supabase Auth accounts, PostgREST deployment settings, or production-compatible RLS. A reviewed deployment and live permission check are still required before changing production.
 
 Legacy QUICK ADMIN manual login and direct browser DB access are still present. Keep PR #2 in **draft** and do not merge or deploy.
+
+
+## V2.15 developer-branch maintenance and payment draft (no paid Supabase branch)
+
+Work completed on the GitHub development branch only. No production Supabase or QUICK ADMIN changes.
+
+- Member maintenance: `maintenance-core.mjs`, `maintenance-core.test.mjs`, `maintenance-index.ts` and `SQL_MAINTENANCE_REVIEW_ONLY.sql`. Actions `member.pause`, `member.resume`, `device.reset_main`, `device.reset_extra` are allowed only to server-verified, explicitly enrolled developer administrators. The SQL proposal checks that the device belongs to the target member, locks rows, uses an idempotency key and preserves remaining subscription days on pause. Non-developers and malformed requests are denied.
+- Payment review: `payment-core.mjs`, `payment-core.test.mjs`, `payment-index.ts` and `SQL_PAYMENT_REVIEW_ONLY.sql`. Actions `payment.approve` and `payment.reject` are pending-only, idempotent and checked within a single transaction. Normal approval extends existing licensed members by 40 days, or 50 days when the **database's** is_new flag says they are new. A browser-supplied new-user flag is never trusted. Rejection requires a reason.
+- Special `[기기추가]|` payment requests are explicitly **not approved** by this initial payment API: they need a separate reviewed device-allocation flow. They must not accidentally extend a license.
+- Shared undeployed Edge helpers in `edge-operations.ts` verify the Auth bearer and call only allowlisted protected RPCs using a server-held key. Never put service keys into the static website.
+- `sql-maintenance-local-test.sql` and `sql-payment-local-test.sql` run in GitHub Actions against a disposable PostgreSQL 17 service using **only synthetic members, payments and devices**.
+- Verified synthetic CI evidence: `QA_MAINTENANCE_SQL_PASS`, `QA_PAYMENT_SQL_PASS`; all Node unit and SQL jobs passed.
+
+**Important:** These are un-deployed development drafts, not a replacement for the existing working UI. The browser still directly performs privileged database operations; the new administrator Auth identities and private mapping are not enrolled. Do not merge PR #2 until the entire auth/CRUD migration, RLS permission review, migration rollback plan and real deployment validation are approved. The existing QUICK ADMIN, ZAPGO-V6 and DUO receiver have not been modified.
+
+The user elected not to create a paid Supabase test branch. Disposable CI PostgreSQL tests are useful but do **not** reproduce Supabase Auth, PostgREST routing, live RLS exposure, or the existing operational data.
