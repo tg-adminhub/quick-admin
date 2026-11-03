@@ -30,7 +30,7 @@ export function createSyntheticTransport({randomUUID}={}){
   const messages=[];
 
   const fetchImpl=async (url,options={})=>{
-    // No actual fetch() call occurs anywhere in this module.
+    // This transport serves in-memory fake results only; no network requests.
     const u=new URL(url);
     if(u.origin!==CLIENT_ORIGIN||!u.pathname.startsWith('/functions/v1/'))
       return closed('INVALID_DEMO_PATH',404);
