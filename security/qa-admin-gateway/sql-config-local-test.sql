@@ -180,3 +180,63 @@ BEGIN
   END IF;
 END $$;
 \echo QA_ADMIN_CONFIG_SQL_PASS
+
+-- Only after synthetic app_settings/admins exist: test safe read RPC too.
+\ir SQL_READ_REVIEW_ONLY.sql
+SELECT set_config('request.jwt.claim.role','service_role',false);
+
+DO $
+DECLARE a jsonb;f jsonb;
+BEGIN
+  a:=public.qa_svc_admin_read(
+    '00000000-0000-4000-8000-000000000001','admin_directory',25,0);
+  IF jsonb_array_length(a)<>2 OR
+     a::text LIKE '%password%' OR
+     a::text LIKE '%HASH%' OR
+     a->0->>'name' IS NULL THEN
+    RAISE EXCEPTION 'ADMIN_DIRECTORY_LEAK_OR_BAD_COUNT'; END IF;
+
+  f:=public.qa_svc_admin_read(
+    '00000000-0000-4000-8000-000000000001','setting_flags',25,0);
+  IF jsonb_array_length(f)<>2 OR f::text LIKE '%SECRET%' OR
+     f::text LIKE '%tg_bot_token%' OR
+     f::text LIKE '%payment_account%' THEN
+    RAISE EXCEPTION 'SETTING_FLAGS_LEAK'; END IF;
+END $;
+
+DO $
+DECLARE denied boolean:=false;
+BEGIN
+  BEGIN
+    PERFORM public.qa_svc_admin_read(
+      '00000000-0000-4000-8000-000000000002','admin_directory',25,0);
+  EXCEPTION WHEN insufficient_privilege THEN denied:=true;
+  END;
+  IF NOT denied THEN RAISE EXCEPTION 'BRANCH_ADMIN_READ_DIRECTORY_ALLOWED'; END IF;
+END $;
+
+DO $
+DECLARE denied boolean:=false;
+BEGIN
+  BEGIN
+    PERFORM public.qa_svc_admin_read(
+      '00000000-0000-4000-8000-000000000002','setting_flags',25,0);
+  EXCEPTION WHEN insufficient_privilege THEN denied:=true;
+  END;
+  IF NOT denied THEN RAISE EXCEPTION 'BRANCH_ADMIN_READ_FLAGS_ALLOWED'; END IF;
+END $;
+
+DO $
+BEGIN
+  IF has_function_privilege('anon',
+     'public.qa_svc_admin_read(uuid,text,integer,integer)','EXECUTE')
+  OR has_function_privilege('authenticated',
+     'public.qa_svc_admin_read(uuid,text,integer,integer)','EXECUTE')
+  OR NOT has_function_privilege('service_role',
+     'public.qa_svc_admin_read(uuid,text,integer,integer)','EXECUTE') THEN
+    RAISE EXCEPTION 'ADMIN_DIRECTORY_RPC_GRANTS_BAD';
+  END IF;
+END $;
+
+\echo QA_ADMIN_CONFIG_READ_SQL_PASS
+
