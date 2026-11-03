@@ -46,3 +46,13 @@ Existing administrators are NOT automatically enrolled. Until the mapping exists
 Run: node --test security/qa-admin-gateway/core.test.mjs
 
 Passing mocked unit tests is not proof of live authentication. No Supabase or GitHub main deployment is performed here.
+## Scoped read-only API (additional development work)
+
+A second Edge Function draft, `read-index.ts`, exposes `GET /functions/v1/qa-admin-read` in a future **development-only** deployment. Resource allowlist: `members`, `payments`, `branches` with bounded `limit` (1–100) and `offset` (0–10000). This endpoint is not deployed.
+
+- `read-core.mjs`: independently verifies Supabase Auth JWT and calls the protected admin mapping. All read requests are passed to a service-only RPC with the **verified auth user ID**. No browser-provided admin ID, role, or branch is used.
+- `read-core.test.mjs`: tests branch-scope enforcement, out-of-scope rows, strict field projection, invalid JWT, revoked mapping, forbidden resource names, limits, and failed upstream dependencies.
+- `SQL_READ_REVIEW_ONLY.sql`: proposed `qa_svc_admin_read` RPC. It independently recomputes the administrator's permitted organization scope, returns only safe columns and explicitly revokes execute from PUBLIC/anon/authenticated. This is a **review-only draft**, not executed.
+- Member read results deliberately omit `password`, `resident_num`, `phone`, and `main_android_id`. Payment results omit `admin_note` and `note`. Settings and devices are not exposed by this first prototype.
+
+These endpoints cannot replace the existing QUICK ADMIN yet: the legacy web app still directly reads/writes public tables, and the 12 administrators require safe new Supabase Auth credentials. Do not route production traffic to these draft endpoints until an isolated development database, audited migration, and end-to-end test plan are ready.
