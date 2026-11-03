@@ -902,15 +902,13 @@ async function doLogin(){
       }
     }catch(e){}
 
-    // ★ 세션 저장 (페이지 새로고침 후 자동 로그인) — 2026.05.27
+    // SECURITY_HARDENING_AUTORESTORE_DISABLED
+    // Persist inactivity timing only. Never persist admin identity as proof of login.
     try{
-      localStorage.setItem('qa_session', JSON.stringify({
-        adminId: data.id,
-        savedAt: Date.now()
-      }));
+      localStorage.removeItem('qa_session');
       localStorage.setItem('qa_last_activity', String(Date.now()));
     }catch(e){}
-    
+
     document.getElementById('login-page').style.display='none';
     document.getElementById('app').style.display='block';
     
@@ -931,54 +929,11 @@ async function doLogin(){
 
 // ★ 세션 자동 복원 — 페이지 로드 시 호출 (10분 이내면 자동 로그인)
 async function tryAutoLogin(){
-  try{
-    var sessionStr = localStorage.getItem('qa_session');
-    var lastActivity = parseInt(localStorage.getItem('qa_last_activity')||'0');
-    if(!sessionStr || !lastActivity) return false;
-    
-    var now = Date.now();
-    var elapsed = now - lastActivity;
-    var TEN_MINUTES = 10 * 60 * 1000;
-    
-    if(elapsed > TEN_MINUTES){
-      // 10분 초과 → 세션 삭제, 로그인 화면
-      localStorage.removeItem('qa_session');
-      localStorage.removeItem('qa_last_activity');
-      return false;
-    }
-    
-    var session = JSON.parse(sessionStr);
-    // DB 에서 admin 정보 다시 가져오기 (변경됐을 수 있음)
-    const {data,error} = await sb.from('admins').select('*').eq('id', session.adminId).maybeSingle();
-    if(error || !data){
-      localStorage.removeItem('qa_session');
-      localStorage.removeItem('qa_last_activity');
-      return false;
-    }
-    
-    // 자동 로그인 처리
-    curAcc=data;
-    realRole=data.role||'dev';
-    realBranchId=data.branch_id||null;
-    role=realRole;
-    user={name:data.name,id:data.username,orgId:data.branch_id,dbId:data.id};
-    
-    localStorage.setItem('qa_last_activity', String(now));  // activity 갱신
-    
-    document.getElementById('login-page').style.display='none';
-    document.getElementById('app').style.display='block';
-    
-    await loadAllData();
-    buildSidebar();
-    navigate('dashboard');
-    try{if(window.DUOA)DUOA.restore();}catch(e){}  // DUO: 저장된 서버 세션이 유효하면 메뉴 복원
-    setTimeout(checkExpiry,700);
-    startInactivityTimer();
-    return true;
-  }catch(e){
-    console.error('tryAutoLogin:', e);
-    return false;
-  }
+  // SECURITY_HARDENING_AUTORESTORE_DISABLED
+  // Browser-controlled adminId is not a valid server session. Fail closed until
+  // the authenticated admin gateway and server-validated restore are implemented.
+  try{localStorage.removeItem('qa_session');}catch(e){}
+  return false;
 }
 
 // ★ 비활동 타이머 — 마지막 활동 시간 갱신 + 10분 후 자동 로그아웃
