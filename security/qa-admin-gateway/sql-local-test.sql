@@ -175,3 +175,5 @@ END $$;
 \echo QA_LOCAL_SQL_SECURITY_PASS
 
 \ir sql-maintenance-local-test.sql
+
+\ir sql-payment-local-test.sql
