@@ -33,6 +33,8 @@ jobs:
         run: node --test security/qa-admin-gateway/review-core.test.mjs
       - name: Test member pause/resume and device reset authorization (mocked)
         run: node --test security/qa-admin-gateway/maintenance-core.test.mjs
+      - name: Test regular payment approval and rejection security (mocked)
+        run: node --test security/qa-admin-gateway/payment-core.test.mjs
       - name: Check exposed client DB call baseline
         run: node security/audit-client.mjs --guardrails
 
