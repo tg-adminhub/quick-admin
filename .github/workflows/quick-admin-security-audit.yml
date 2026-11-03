@@ -43,6 +43,8 @@ jobs:
         run: node --test security/qa-admin-gateway/config-core.test.mjs
       - name: Test protected config browser adapter
         run: node --test security/ui/secure-config-client.test.mjs
+      - name: Test dev-only redacted admin directory and setting flag reads
+        run: node --test security/qa-admin-gateway/config-read.test.mjs
       - name: Check exposed client DB call baseline
         run: node security/audit-client.mjs --guardrails
 
