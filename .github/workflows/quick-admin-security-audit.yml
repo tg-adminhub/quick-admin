@@ -39,6 +39,10 @@ jobs:
         run: node --test security/ui/secure-admin-client.test.mjs
       - name: Test standalone synthetic admin UI pilot
         run: node --test security/ui/secure-pilot.test.mjs
+      - name: Test protected branch/admin/settings config gateway
+        run: node --test security/qa-admin-gateway/config-core.test.mjs
+      - name: Test protected config browser adapter
+        run: node --test security/ui/secure-config-client.test.mjs
       - name: Check exposed client DB call baseline
         run: node security/audit-client.mjs --guardrails
 
