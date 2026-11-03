@@ -56,3 +56,19 @@ A second Edge Function draft, `read-index.ts`, exposes `GET /functions/v1/qa-adm
 - Member read results deliberately omit `password`, `resident_num`, `phone`, and `main_android_id`. Payment results omit `admin_note` and `note`. Settings and devices are not exposed by this first prototype.
 
 These endpoints cannot replace the existing QUICK ADMIN yet: the legacy web app still directly reads/writes public tables, and the 12 administrators require safe new Supabase Auth credentials. Do not route production traffic to these draft endpoints until an isolated development database, audited migration, and end-to-end test plan are ready.
+
+## Development without a paid Supabase branch (2026-11-03)
+
+The user chose **not** to create a paid Supabase development branch. Development remains confined to this GitHub security branch. No Supabase project, production database, or existing QUICK ADMIN/ZAPGO-V6/DUO deployments were modified.
+
+### Member approval/rejection prototype
+
+- `review-core.mjs` — POST-only, dev-only, fail-closed member-review API. A newly verified Supabase Auth identity and active private admin mapping are required. Only the actions `member.approve` / `member.reject` are accepted. Client-admin IDs, arbitrary fields, and unaudited roles are rejected.
+- `review-index.ts` — undeployed Edge Function adapter. Secrets remain server-side.
+- `SQL_REVIEW_MUTATE_ONLY.sql` — review-only transaction proposal for pending member approval (including the existing 7-day initial license), rejection with reason, and idempotent audit record. **Do not execute on production.**
+- `review-core.test.mjs` — mocked authorization, input validation, revoked mapping, replay handling, and error tests.
+- `sql-local-test.sql` — synthetic-data verification of the SQL proposals using a disposable PostgreSQL 17 service in GitHub Actions; the service and test rows are discarded after the workflow.
+
+GitHub Actions job `security-regression` and disposable `sql-isolated-postgres` passed after the SQL syntax fix. These do **not** test Supabase Auth accounts, PostgREST deployment settings, or production-compatible RLS. A reviewed deployment and live permission check are still required before changing production.
+
+Legacy QUICK ADMIN manual login and direct browser DB access are still present. Keep PR #2 in **draft** and do not merge or deploy.
