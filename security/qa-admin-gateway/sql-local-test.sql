@@ -177,3 +177,5 @@ END $$;
 \ir sql-maintenance-local-test.sql
 
 \ir sql-payment-local-test.sql
+
+\ir sql-config-local-test.sql
