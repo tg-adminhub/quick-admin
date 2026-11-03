@@ -27,5 +27,7 @@ jobs:
         run: node --test security/audit-client.test.mjs
       - name: Test server-verified admin gateway (mock Auth + mock RPC)
         run: node --test security/qa-admin-gateway/core.test.mjs
+      - name: Test scoped member, payment and branch read API (mocked)
+        run: node --test security/qa-admin-gateway/read-core.test.mjs
       - name: Check exposed client DB call baseline
         run: node security/audit-client.mjs --guardrails
