@@ -13,7 +13,9 @@ import {ALLOWED_ORIGIN, UUID, TOKEN, verifiedProfile} from './core.mjs';
 export const RESOURCES = Object.freeze({
   members: ['id','username','real_name','status','branch_id','app_type','license_expires_at'],
   payments:['id','user_id','amount','status','created_at','branch_id'],
-  branches:['id','name','parent_id','type']
+  branches:['id','name','parent_id','type'],
+  admin_directory:['id','username','name','role','branch_id'],
+  setting_flags:['id','key','value','updated_at']
 });
 
 function respond(status, body, origin, allowedOrigin) {
@@ -41,6 +43,17 @@ function scopedRow(row,resource,profile) {
   if(resource==='payments'&&(!Number.isSafeInteger(row.user_id)||row.user_id<1)) return false;
   if(resource==='branches') {
     if (typeof row.name!=='string' || !row.name || typeof row.type!=='string') return false;
+  }
+  if(resource==='admin_directory') {
+    if(profile.role!=='dev') return false;
+    if(!['dev','master','branch','sub'].includes(row.role) ||
+       typeof row.username!=='string'||!row.username ||
+       typeof row.name!=='string'||!row.name) return false;
+  }
+  if(resource==='setting_flags') {
+    if(profile.role!=='dev') return false;
+    if(!['payment_visible','maintenance_mode'].includes(row.key) ||
+       !['true','false'].includes(row.value)) return false;
   }
   if(profile.visibleBranchIds===null) return true;
   const branchId=resource==='branches'?row.id:row.branch_id;
@@ -110,8 +123,10 @@ export async function handleAdminRead(req, {
   catch {return respond(503,{ok:false,code:'ADMIN_LOOKUP_UNAVAILABLE'},origin,allowedOrigin);}
   if(!admin)
     return respond(403,{ok:false,code:'ADMIN_ACCESS_DENIED'},origin,allowedOrigin);
+  if(['admin_directory','setting_flags'].includes(resource)&&admin.role!=='dev')
+    return respond(403,{ok:false,code:'RESOURCE_ACCESS_DENIED'},origin,allowedOrigin);
 
-  // Do not provide settings (including secret-like values) through this API.
+  // Only two non-secret boolean setting flags are readable here.
   // The SQL RPC must recompute role/branch scope itself using authUserId.
   let rows;
   try {rows=await queryRead({authUserId:userId,resource,limit,offset});}
