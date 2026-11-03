@@ -75,9 +75,7 @@ test('a prepared action cannot be modified to add admin role or secret',async()=
   await rejected(api.submit({body:{...original.body,adminId:1}}),'INVALID_ACTION_INPUT');
   await rejected(api.submit({body:{...original.body,idempotencyKey:'bad'}}),'INVALID_ACTION_INPUT');
   await rejected(api.submit({body:{...original.body,newName:'<svg onload=alert(1)>'}}),'INVALID_ACTION_INPUT');
-  await rejected(api.submit({body:{...original.body,expectedName:'wrong'}}),
-    'INVALID_GATEWAY_RESPONSE').catch(()=>{});
-  assert.equal(calls.length>=0,true);
+  assert.equal(calls.length,0);
 });
 test('retry preserves same idempotency key and handles duplicate response',async()=>{
   let n=0;
