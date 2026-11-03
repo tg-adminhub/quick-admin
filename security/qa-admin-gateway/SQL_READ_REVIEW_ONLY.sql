@@ -26,7 +26,7 @@ BEGIN
   IF auth.role() IS DISTINCT FROM 'service_role' THEN
     RAISE EXCEPTION 'restricted' USING ERRCODE = '42501';
   END IF;
-  IF p_auth_user_id IS NULL OR p_resource NOT IN ('members','payments','branches')
+  IF p_auth_user_id IS NULL OR p_resource NOT IN ('members','payments','branches','admin_directory','setting_flags')
      OR p_limit IS NULL OR p_limit < 1 OR p_limit > 100
      OR p_offset IS NULL OR p_offset < 0 OR p_offset > 10000 THEN
     RAISE EXCEPTION 'invalid_query' USING ERRCODE = '22023';
@@ -88,6 +88,34 @@ BEGIN
       FROM public.branches AS b
       WHERE v_role='dev' OR b.id = ANY(v_scope)
       ORDER BY b.id
+      LIMIT p_limit OFFSET p_offset
+    ) t;
+  ELSIF p_resource = 'admin_directory' THEN
+    IF v_role <> 'dev' THEN
+      RAISE EXCEPTION 'admin_directory_denied' USING ERRCODE='42501';
+    END IF;
+    SELECT COALESCE(jsonb_agg(to_jsonb(t) ORDER BY t.id),'[]'::jsonb)
+      INTO v_items
+    FROM (
+      SELECT a.id,a.username,a.name,a.role,a.branch_id
+      FROM public.admins a
+      WHERE a.role IN ('dev','master','branch','sub')
+      ORDER BY a.id
+      LIMIT p_limit OFFSET p_offset
+    ) t;
+
+  ELSIF p_resource = 'setting_flags' THEN
+    IF v_role <> 'dev' THEN
+      RAISE EXCEPTION 'setting_flags_denied' USING ERRCODE='42501';
+    END IF;
+    SELECT COALESCE(jsonb_agg(to_jsonb(t) ORDER BY t.id),'[]'::jsonb)
+      INTO v_items
+    FROM (
+      SELECT s.id,s.key,s.value,s.updated_at
+      FROM public.app_settings s
+      WHERE s.key IN ('payment_visible','maintenance_mode')
+        AND s.value IN ('true','false')
+      ORDER BY s.id
       LIMIT p_limit OFFSET p_offset
     ) t;
   END IF;
