@@ -2,7 +2,7 @@
  * QUICK ADMIN browser-side security inventory.
  *
  * STATIC ONLY. No network, credentials, or database mutations.
- * Baseline counts reflect public/index.html on 2026-11-03.
+ * Baseline counts reflect security-branch index.html after unsafe auto-restore removal on 2026-11-03.
  * This does not claim existing direct access is secure.
  */
 import {readFileSync} from 'node:fs';
@@ -10,7 +10,7 @@ import {resolve} from 'node:path';
 import {fileURLToPath} from 'node:url';
 
 export const baseline = Object.freeze({
-  admins:11,
+  admins:10,
   branches:6,
   users:18,
   user_devices:5,
