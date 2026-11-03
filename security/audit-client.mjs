@@ -30,8 +30,7 @@ export function inspectClient(html) {
   const start = html.indexOf('async function tryAutoLogin(){');
   const next = html.indexOf('// ★ 비활동 타이머', start);
   const autoLoginSource = start >= 0 && next > start ? html.slice(start, next) : '';
-  const legacyAutoRestore = /qa_session|session\.adminId|\.from\(['"]admins['"]\)/.test(autoLoginSource)
-    && !/SECURITY_HARDENING_AUTORESTORE_DISABLED/.test(autoLoginSource);
+  const legacyAutoRestore = /localStorage\.getItem\(['"]qa_session['"]\)|session\.adminId|\.from\(['"]admins['"]\)/.test(autoLoginSource);
   return {
     directCalls,
     legacyAutoRestore,
