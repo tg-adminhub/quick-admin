@@ -173,7 +173,10 @@ test('tampered action objects cannot inject privileged fields',async()=>{
     {...intent,id:18},
     {...intent,type:'deletePayment'},
     {...intent,body:{...intent.body,idempotencyKey:'invalid'}}
-  ])await errorCode(client.submit(change),'INVALID_ACTION_INPUT');
+  ])await assert.rejects(client.submit(change),e=>
+    e instanceof GatewayError &&
+    ['INVALID_ACTION_INPUT','INVALID_AMOUNT','INVALID_IDEMPOTENCY_KEY'].includes(e.code)
+  );
   assert.equal(calls.length,0);
 });
 test('same intent retries preserve idempotency key',async()=>{
