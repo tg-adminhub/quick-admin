@@ -3,7 +3,7 @@
  * This script NEVER uses real credentials, registers users, or alters the DB.
  * Runs in a disposable GitHub Actions runner, NOT a developer workstation.
  */
-import {mkdtemp,writeFile,readFile,stat} from 'node:fs/promises';
+import {mkdtemp,writeFile,readFile,appendFile} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {createHash} from 'node:crypto';
@@ -89,6 +89,7 @@ async function main(){
     pass('DUO_APK_DOWNLOAD_AND_SHA','BYTES_'+apk.bytes);
     // Used only by the NEXT step in this disposable runner; path not uploaded.
     console.log('DUO_APK_LOCAL_PATH='+apk.path);
+    if(process.env.GITHUB_ENV)await appendFile(process.env.GITHUB_ENV,'DUO_APK_PATH='+apk.path+'\n');
   }catch(e){fail('DUO_APK_DOWNLOAD_AND_SHA',e?.message||'unavailable');}
   console.log('=== DUO END READ_ONLY_SMOKE ===');
   if(process.exitCode)throw Error('LIVE_SMOKE_FAILED');
