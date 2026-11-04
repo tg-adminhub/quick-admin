@@ -67,8 +67,7 @@ test('logout removes all orders and both live statuses; no catch calls',async()=
     setStatus:(side,v)=>states.push({kind:'status',side,live:v.live}),
     setDualAllowed:()=>{}
   };
-  let cancel;
-  const transport=async()=>{
+  const transport=async(_url,options)=>{
     return new Response(new ReadableStream({
       start(c){
         c.enqueue(new TextEncoder().encode(line({
@@ -77,7 +76,7 @@ test('logout removes all orders and both live statuses; no catch calls',async()=
           sources:[{source:'인성1',receiving:true}],
           dualAllowed:false,catchEnabled:false
         })));
-        cancel=c;
+        options.signal.addEventListener('abort',()=>c.close(),{once:true});
       },
       cancel(){}
     }),{status:200,headers:{'content-type':'text/event-stream'}});
