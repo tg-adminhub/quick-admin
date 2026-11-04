@@ -45,6 +45,10 @@ jobs:
         run: node --test security/ui/secure-config-client.test.mjs
       - name: Test dev-only redacted admin directory and setting flag reads
         run: node --test security/qa-admin-gateway/config-read.test.mjs
+      - name: Test independent DUO 310 order to UI channel/snapshot bridge
+        run: node --test security/duo-order-client/order-model.test.mjs
+      - name: Test authenticated DUO order SSE transport and disconnect handling
+        run: node --test security/duo-order-client/sse-client.test.mjs
       - name: Check exposed client DB call baseline
         run: node security/audit-client.mjs --guardrails
 
