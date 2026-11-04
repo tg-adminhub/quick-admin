@@ -26,8 +26,9 @@ test('approved same-member binding maps both authorized sources without issuing 
   const resolve=createDuoRiderResolver(config);
   const a=await resolve('duo-member-token','인성1');
   const b=await resolve('duo-member-token','인성2');
-  assert.equal(a.port,12000);
-  assert.equal(b.port,12200);
+  assert.equal(a.source,'인성1');
+  assert.equal(b.source,'인성2');
+  assert.equal('port' in a,false);
   assert.equal(a.rider.id,record.id);
   assert.equal(a.expiresAt,t+15000);
   assert.equal(count.auth,2);
