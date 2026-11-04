@@ -49,3 +49,18 @@ node --test security/duo-order-client/order-model.test.mjs security/duo-order-cl
 ```
 
 Security branch only; never merge PR #2 or deploy the receiver before all above prerequisites and tests are satisfied.
+
+## V6 existing-ZAPGO-session integration (2026-11-04)
+
+The user confirms ZAPGO is their own approved app and its authenticated receive session may be reused. Do NOT create new Insung TCP connections or copy vendor device credentials. The previously developed ZAPGO V6 existing-session mirror uses local port **18302** for its SSE/health service, not the separate independent DUO receive port 18320.
+
+- `v6-existing-session-bridge.mjs` adapts V6 SSE `snapshot` and `orders` events into the existing `DuoUI.setSnapshot`, `setStatus` and dual status display methods; it does not send catch/cancel commands.
+- DUO authenticates with its *own* member JWT in an Authorization header. Never pass ZAPGO JWT to DUO. Bind only the same verified user using `/etc/duo-receive/bindings.json`.
+- V6's original upstream session must be active in ZAPGO for DUO to see new events. Disconnecting ZAPGO's source sessions stops DUO's mirrored order feed; `health` HTTP 200 alone is not proof of receiving fresh orders.
+- Before production switch: verify `http://127.0.0.1:18302/health`, confirmed binding, active source sessions, SSE subscription and new order events. This is read-only and requires NO original Gateway restart.
+- The Android app cannot access the VPS loopback URL. A reviewed HTTPS proxy to the exact `/duo/live/events` route is required. The published DUO 1.0.01 APK has no proven event-stream client: rebuild after native Android integration.
+- Never auto-restart the original sisd-gateway or overwrite ZAPGO's receiver during business hours. Existing sessions must be preserved.
+
+IMPORTANT: the separately staged independent DUO receiver on 18320 needs its own vendor-approved login and device profile, but those are **not prerequisites** for reusing an already authenticated ZAPGO session via the V6 mirror.
+
+GitHub Actions tests the V6 bridge with fabricated SSE frames. The real VPS and published APK are not altered by the commits in this folder.
