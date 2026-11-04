@@ -53,6 +53,8 @@ jobs:
         run: node --test security/duo-order-client/v6-existing-session-bridge.test.mjs
       - name: Verify DUO-to-approved ZAPGO rider handoff fails closed
         run: node --test security/duo-order-client/duo-rider-resolver.test.mjs
+      - name: Test secure DUO-only WebSocket upgrade path
+        run: node --test security/duo-order-client/duo-upgrade-route.test.mjs
       - name: Check exposed client DB call baseline
         run: node security/audit-client.mjs --guardrails
 
