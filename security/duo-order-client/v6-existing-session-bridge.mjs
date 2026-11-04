@@ -19,13 +19,13 @@ export function createV6DuoDisplayBridge({
      typeof getAccessToken!=='function'||typeof onDiagnostic!=='function')
     throw Error('DUO_V6_BRIDGE_CONFIG_INVALID');
   const model=createOrderState({now});
-  let lastBlocked=null,lastSourceState='';
+  let lastBlocked=null,lastSourceState='',lastOrderCount=-1;
   function show(state){
     // Only the read-only DuoUI public methods are called.
     renderToDuoUI(duoUI,state);
     const sourceStatus=state.sources.map(x=>x.source+':'+(x.receiving?'READY':'WAIT')).join(',');
-    if(lastBlocked!==state.blocked||sourceStatus!==lastSourceState){
-      lastBlocked=state.blocked;lastSourceState=sourceStatus;
+    if(lastBlocked!==state.blocked||sourceStatus!==lastSourceState||lastOrderCount!==state.orders.length){
+      lastBlocked=state.blocked;lastSourceState=sourceStatus;lastOrderCount=state.orders.length;
       onDiagnostic(Object.freeze({
         connected:!state.blocked&&state.sources.some(s=>s.receiving),
         sources:state.sources.map(x=>Object.freeze({...x})),
