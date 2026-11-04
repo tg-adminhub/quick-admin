@@ -31,7 +31,6 @@ export function createDuoRiderResolver({validateDuo,loadMapping,loadRider,allowR
     return Object.freeze({
       accountId:session.accountId,
       source,
-      port:source==='인성1'?12000:12200,
       rider,
       expiresAt:Math.min(session.expiresAt,expiry,clock()+15000)
     });
