@@ -1,0 +1,50 @@
+name: DUO live dev APK and emulator smoke (no credentials)
+
+on:
+  push:
+    branches:
+      - security/qa-auth-hardening-v212
+    paths:
+      - security/duo-app-smoke/**
+      - .github/workflows/duo-dev-apk-smoke.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  apk-and-launch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - name: Checkout isolated security branch
+        uses: actions/checkout@v4
+      - name: Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Verify deployed DUO endpoints and download SHA-verified published development APK
+        run: node security/duo-app-smoke/check.mjs
+      - name: Enable KVM for disposable Android emulator
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - name: Install APK and start Android login screen (NO real credentials)
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 35
+          target: google_apis
+          arch: x86_64
+          profile: pixel_4
+          emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim
+          disable-animations: true
+          script: bash security/duo-app-smoke/emulator.sh
+      - name: Store emulator launch screenshot only (synthetic screen, 1 day)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: duo-dev-emulator-login-screen
+          path: ${{ runner.temp }}/duo-launch-check/login-screen.png
+          retention-days: 1
+          if-no-files-found: ignore
