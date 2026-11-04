@@ -5,7 +5,7 @@
  */
 export function parseDuoUpgrade({url,authorization,secureTransport}={}){
   if(secureTransport!==true)throw Error('DUO_TLS_REQUIRED');
-  if(typeof url!=='string'||url.length>512)throw Error('DUO_ROUTE_INVALID');
+  if(typeof url!=='string'||url.length>512||!url.startsWith('/')||url.startsWith('//'))throw Error('DUO_ROUTE_INVALID');
   let uri;try{uri=new URL(url,'https://duo.invalid')}catch{throw Error('DUO_ROUTE_INVALID')}
   if(uri.pathname!=='/duo/driver-ws'||uri.hash||uri.username||uri.password||
     uri.searchParams.size!==1||!uri.searchParams.has('port'))
