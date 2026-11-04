@@ -1,0 +1,102 @@
+name: QUICK ADMIN security audit
+
+on:
+  pull_request:
+    paths:
+      - index.html
+      - security/**
+      - .github/workflows/quick-admin-security-audit.yml
+  push:
+    branches:
+      - security/qa-auth-hardening-v212
+
+permissions:
+  contents: read
+
+jobs:
+  security-regression:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Verify static security regression tests
+        run: node --test security/audit-client.test.mjs
+      - name: Test server-verified admin gateway (mock Auth + mock RPC)
+        run: node --test security/qa-admin-gateway/core.test.mjs
+      - name: Test scoped member, payment and branch read API (mocked)
+        run: node --test security/qa-admin-gateway/read-core.test.mjs
+      - name: Test dev-only member approval/rejection security (mocked)
+        run: node --test security/qa-admin-gateway/review-core.test.mjs
+      - name: Test member pause/resume and device reset authorization (mocked)
+        run: node --test security/qa-admin-gateway/maintenance-core.test.mjs
+      - name: Test regular payment approval and rejection security (mocked)
+        run: node --test security/qa-admin-gateway/payment-core.test.mjs
+      - name: Test protected browser client integration against mock endpoints
+        run: node --test security/ui/secure-admin-client.test.mjs
+      - name: Test standalone synthetic admin UI pilot
+        run: node --test security/ui/secure-pilot.test.mjs
+      - name: Test protected branch/admin/settings config gateway
+        run: node --test security/qa-admin-gateway/config-core.test.mjs
+      - name: Test protected config browser adapter
+        run: node --test security/ui/secure-config-client.test.mjs
+      - name: Test dev-only redacted admin directory and setting flag reads
+        run: node --test security/qa-admin-gateway/config-read.test.mjs
+      - name: Test independent DUO 310 order to UI channel/snapshot bridge
+        run: node --test security/duo-order-client/order-model.test.mjs
+      - name: Test authenticated DUO order SSE transport and disconnect handling
+        run: node --test security/duo-order-client/sse-client.test.mjs
+      - name: Test existing ZAPGO V6 authenticated session receive to DUO WebView
+        run: node --test security/duo-order-client/v6-existing-session-bridge.test.mjs
+      - name: Verify DUO-to-approved ZAPGO rider handoff fails closed
+        run: node --test security/duo-order-client/duo-rider-resolver.test.mjs
+      - name: Test secure DUO-only WebSocket upgrade path
+        run: node --test security/duo-order-client/duo-upgrade-route.test.mjs
+      - name: Check exposed client DB call baseline
+        run: node security/audit-client.mjs --guardrails
+
+  sql-isolated-postgres:
+    name: Disposable PostgreSQL SQL regression (synthetic data)
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: qa_security_mock
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd="pg_isready -U postgres -d qa_security_mock"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=12
+    env:
+      PGHOST: localhost
+      PGPORT: "5432"
+      PGUSER: postgres
+      PGPASSWORD: postgres
+      PGDATABASE: qa_security_mock
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Run synthetic identity and member review SQL tests
+        run: psql -X -v ON_ERROR_STOP=1 -f security/qa-admin-gateway/sql-local-test.sql
+
+  duo-apk-order-wiring-inspection:
+    name: Verify published DUO APK order-stream references (no login)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Read-only DUO login endpoint and verified APK download
+        run: node security/duo-app-smoke/check.mjs
+      - name: Inspect APK assets and dex for stream transport references
+        run: python3 security/duo-app-smoke/check-order-wiring.py

@@ -1,0 +1,89 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>QUICK ADMIN — 보안 연결 시연</title>
+<style>
+:root{color-scheme:dark;font-family:system-ui,-apple-system,"Malgun Gothic",sans-serif;background:#101317;color:#e5eaf2}
+*{box-sizing:border-box}
+body{margin:0;min-height:100vh;padding:30px 16px}
+main{max-width:1060px;margin:auto}
+h1{font-size:27px;margin:0 0 9px;letter-spacing:-.5px}
+h2{font-size:18px;margin:0 0 12px}
+p{line-height:1.7;color:#aab4c2}
+header{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:14px;margin-bottom:16px}
+.notice{border:1px solid #ae7037;background:#32261b;border-radius:12px;padding:14px 16px;color:#ffe1b8;margin-bottom:18px;font-size:14px;line-height:1.7}
+.badge{font-size:12px;font-weight:750;border:1px solid #ae7037;border-radius:99px;color:#f3c382;padding:8px 11px;white-space:nowrap}
+.panel{background:#1b2027;border:1px solid #323a45;border-radius:14px;padding:20px;margin-bottom:16px}
+.grid{display:grid;grid-template-columns:minmax(210px,300px) 1fr;gap:16px}
+@media(max-width:760px){.grid{grid-template-columns:1fr}}
+button{border:1px solid #46515d;color:#e8edf4;background:#29333d;border-radius:9px;padding:10px 13px;cursor:pointer;font:inherit;font-size:13px}
+button:hover{background:#344453}
+button:disabled{opacity:.45;cursor:not-allowed}
+button.active{background:#245b63;border-color:#468d97}
+.actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:13px}
+small{color:#91a0b1;font-size:12px}
+strong{font-weight:750}
+pre{margin:12px 0 0;white-space:pre-wrap;word-break:break-word;font:12px/1.6 ui-monospace,monospace;background:#11171b;border:1px solid #313e47;border-radius:10px;padding:13px;min-height:50px}
+.record{border:1px solid #35404a;border-radius:10px;padding:12px;margin:10px 0}
+.record p{margin:0 0 8px;color:#e8edf4;font-size:14px}
+.record small{display:block}
+.log{color:#9fd7b6}
+footer{margin-top:18px;font-size:12px;color:#7e8d9d;line-height:1.7}
+</style>
+</head>
+<body>
+<main>
+<header>
+<div><h1>QUICK ADMIN · 보안 API 연결 미리보기</h1>
+<p style="margin:0">기존 관리 화면과 별도로 개발하는 독립 실험 화면</p></div>
+<span class="badge">가상 데이터 · 운영 DB 미연결</span>
+</header>
+<div class="notice">
+<strong>실제 회원·결제·관리자 데이터가 아닙니다.</strong>
+이 페이지는 자바스크립트 메모리 안에 만든 가짜 기록만 사용합니다.
+실제 Supabase로 네트워크 요청을 보내지 않으며 승인·결제·정지 버튼도 운영 데이터에 영향을 주지 않습니다.
+기존 QUICK ADMIN 로그인과 화면은 그대로 유지됩니다.
+</div>
+<div class="grid">
+<section class="panel">
+<h2>인증·권한 응답</h2>
+<small>가짜 JWT → 모의 API → 관리자 프로필</small>
+<pre id="identity" aria-live="polite">검증 대기</pre>
+<h2 style="margin-top:25px">시연 실행</h2>
+<div class="actions">
+<button type="button" data-resource="members" class="active">회원 목록</button>
+<button type="button" data-resource="payments">결제 목록</button>
+<button type="button" data-resource="branches">지점 목록</button>
+</div>
+<p><small>실제 연동에는 Supabase Auth 신규 계정 등록과 서버 API 배포, 서버 측 권한 검증이 필요합니다.</small></p>
+</section>
+<section class="panel">
+<h2 id="list-title">가상 회원 목록</h2>
+<div id="records" aria-live="polite">가져오는 중…</div>
+</section>
+</div>
+<section class="panel">
+<h2>모의 관리 작업</h2>
+<p><small>아래 버튼은 네트워크 없는 메모리 데이터만 변경합니다. 각 요청에는 중복 처리 방지 키가 포함됩니다.</small></p>
+<div class="actions" id="controls">
+<button type="button" data-action="approveMember" data-id="101">가상 회원 101 승인</button>
+<button type="button" data-action="rejectMember" data-id="101">가상 회원 101 거절</button>
+<button type="button" data-action="pauseMember" data-id="102">가상 회원 102 정지</button>
+<button type="button" data-action="resumeMember" data-id="102">가상 회원 102 해제</button>
+<button type="button" data-action="resetMainDevice" data-id="102">가상 메인 기기 초기화</button>
+<button type="button" data-action="approvePayment" data-id="201">가상 결제 201 승인</button>
+<button type="button" data-action="rejectPayment" data-id="201">가상 결제 201 거절</button>
+</div>
+<pre id="activity" class="log" aria-live="polite">모의 작업 내역 없음</pre>
+<button id="reset" type="button" style="margin-top:12px">가상 데이터 초기화</button>
+</section>
+<footer>
+이 화면은 개발 브랜치의 시연용이며 실제 운영 사이트에 연결되지 않습니다.
+코드가 통과한 모의·PostgreSQL 테스트는 Supabase Auth/PostgREST 운영 권한 및 기존 전체 화면 기능의 검증을 대신하지 않습니다.
+</footer>
+</main>
+<script type="module" src="./secure-pilot.mjs"></script>
+</body>
+</html>

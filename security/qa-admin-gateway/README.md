@@ -1,0 +1,107 @@
+# QUICK ADMIN — verified administrator gateway (draft)
+
+**Not deployed.** This module lives on the security/qa-auth-hardening-v212 development branch only. It does not modify the operational QUICK ADMIN login, Supabase production tables or the DUO upstream receiver.
+
+## Implemented
+
+- core.mjs: fail-closed HTTP handler, with injected Auth token verifier and protected profile loader.
+- core.test.mjs: unit tests for JWT rejection, missing/revoked admin mapping, branch scope, untrusted client input, CORS and upstream outages.
+- index.ts: draft Edge entrypoint; server verifies the bearer with Supabase Auth and calls a service-role-only profile RPC. No secret is returned to the client.
+- SQL_REVIEW_ONLY.sql: draft private admin mapping and protected RPC. This is NOT a migration to execute.
+
+## Request contract
+
+After provisioning: GET /functions/v1/qa-admin-gateway with Authorization: Bearer <Supabase Auth JWT>.
+200 returns an admin display profile and server-computed branch scope. 401 denotes invalid JWT, 403 denotes no active admin mapping or invalid scope, 503 denotes unavailable Auth/RPC.
+
+Never trust browser-supplied admin ID, role, or branch; never return the legacy admins.password value.
+
+## Admin enrollment must happen separately
+
+1. Verify each real administrator identity through an out-of-band trusted process.
+2. Issue a NEW Supabase Auth credential with invitation/password reset, preferably MFA. Never import existing SHA-256 hashes as credentials.
+3. Bind that verified Auth UUID to exactly one legacy public.admins ID in qa_private.admin_identities, initially enabled=false.
+4. Review each admin role and branch, then explicitly enable the mapping.
+5. Revocation must flip mapping enabled=false; each gateway request re-reads active permission.
+
+Existing administrators are NOT automatically enrolled. Until the mapping exists the new gateway rejects access. The old login is still insecure and cannot be deployed as secure just because this module exists.
+
+## Role and scope
+
+- dev: global scope.
+- master/branch/sub: own branch and descendants, computed server-side with cycle guard.
+- The browser's getVisibleBranchIds is only for UI; subsequent CRUD endpoints must independently enforce per-record branch scope server-side.
+
+## Before any deployment
+
+- Obtain an isolated Supabase test project/branch and confirm any associated cost.
+- Convert SQL_REVIEW_ONLY.sql to a real reviewed Supabase CLI migration on the test environment; confirm private RLS and PUBLIC/anon/authenticated execute restrictions.
+- Bundle core.mjs with index.ts as a new Edge Function configured to verify JWT. Run on development only.
+- Verify Auth credentials, mapping revocation, role changes, branch hierarchy, invalid JWT, CORS, and zero secret leakage.
+- Replace ALL legacy browser-origin direct table access with server-side scoped APIs.
+- Only then design/prove RLS policies for the 13 public tables and stage a controlled production cutover and rollback.
+
+## Local tests
+
+Run: node --test security/qa-admin-gateway/core.test.mjs
+
+Passing mocked unit tests is not proof of live authentication. No Supabase or GitHub main deployment is performed here.
+## Scoped read-only API (additional development work)
+
+A second Edge Function draft, `read-index.ts`, exposes `GET /functions/v1/qa-admin-read` in a future **development-only** deployment. Resource allowlist: `members`, `payments`, `branches` with bounded `limit` (1–100) and `offset` (0–10000). This endpoint is not deployed.
+
+- `read-core.mjs`: independently verifies Supabase Auth JWT and calls the protected admin mapping. All read requests are passed to a service-only RPC with the **verified auth user ID**. No browser-provided admin ID, role, or branch is used.
+- `read-core.test.mjs`: tests branch-scope enforcement, out-of-scope rows, strict field projection, invalid JWT, revoked mapping, forbidden resource names, limits, and failed upstream dependencies.
+- `SQL_READ_REVIEW_ONLY.sql`: proposed `qa_svc_admin_read` RPC. It independently recomputes the administrator's permitted organization scope, returns only safe columns and explicitly revokes execute from PUBLIC/anon/authenticated. This is a **review-only draft**, not executed.
+- Member read results deliberately omit `password`, `resident_num`, `phone`, and `main_android_id`. Payment results omit `admin_note` and `note`. Settings and devices are not exposed by this first prototype.
+
+These endpoints cannot replace the existing QUICK ADMIN yet: the legacy web app still directly reads/writes public tables, and the 12 administrators require safe new Supabase Auth credentials. Do not route production traffic to these draft endpoints until an isolated development database, audited migration, and end-to-end test plan are ready.
+
+## Development without a paid Supabase branch (2026-11-03)
+
+The user chose **not** to create a paid Supabase development branch. Development remains confined to this GitHub security branch. No Supabase project, production database, or existing QUICK ADMIN/ZAPGO-V6/DUO deployments were modified.
+
+### Member approval/rejection prototype
+
+- `review-core.mjs` — POST-only, dev-only, fail-closed member-review API. A newly verified Supabase Auth identity and active private admin mapping are required. Only the actions `member.approve` / `member.reject` are accepted. Client-admin IDs, arbitrary fields, and unaudited roles are rejected.
+- `review-index.ts` — undeployed Edge Function adapter. Secrets remain server-side.
+- `SQL_REVIEW_MUTATE_ONLY.sql` — review-only transaction proposal for pending member approval (including the existing 7-day initial license), rejection with reason, and idempotent audit record. **Do not execute on production.**
+- `review-core.test.mjs` — mocked authorization, input validation, revoked mapping, replay handling, and error tests.
+- `sql-local-test.sql` — synthetic-data verification of the SQL proposals using a disposable PostgreSQL 17 service in GitHub Actions; the service and test rows are discarded after the workflow.
+
+GitHub Actions job `security-regression` and disposable `sql-isolated-postgres` passed after the SQL syntax fix. These do **not** test Supabase Auth accounts, PostgREST deployment settings, or production-compatible RLS. A reviewed deployment and live permission check are still required before changing production.
+
+Legacy QUICK ADMIN manual login and direct browser DB access are still present. Keep PR #2 in **draft** and do not merge or deploy.
+
+
+## V2.15 developer-branch maintenance and payment draft (no paid Supabase branch)
+
+Work completed on the GitHub development branch only. No production Supabase or QUICK ADMIN changes.
+
+- Member maintenance: `maintenance-core.mjs`, `maintenance-core.test.mjs`, `maintenance-index.ts` and `SQL_MAINTENANCE_REVIEW_ONLY.sql`. Actions `member.pause`, `member.resume`, `device.reset_main`, `device.reset_extra` are allowed only to server-verified, explicitly enrolled developer administrators. The SQL proposal checks that the device belongs to the target member, locks rows, uses an idempotency key and preserves remaining subscription days on pause. Non-developers and malformed requests are denied.
+- Payment review: `payment-core.mjs`, `payment-core.test.mjs`, `payment-index.ts` and `SQL_PAYMENT_REVIEW_ONLY.sql`. Actions `payment.approve` and `payment.reject` are pending-only, idempotent and checked within a single transaction. Normal approval extends existing licensed members by 40 days, or 50 days when the **database's** is_new flag says they are new. A browser-supplied new-user flag is never trusted. Rejection requires a reason.
+- Special `[기기추가]|` payment requests are explicitly **not approved** by this initial payment API: they need a separate reviewed device-allocation flow. They must not accidentally extend a license.
+- Shared undeployed Edge helpers in `edge-operations.ts` verify the Auth bearer and call only allowlisted protected RPCs using a server-held key. Never put service keys into the static website.
+- `sql-maintenance-local-test.sql` and `sql-payment-local-test.sql` run in GitHub Actions against a disposable PostgreSQL 17 service using **only synthetic members, payments and devices**.
+- Verified synthetic CI evidence: `QA_MAINTENANCE_SQL_PASS`, `QA_PAYMENT_SQL_PASS`; all Node unit and SQL jobs passed.
+
+**Important:** These are un-deployed development drafts, not a replacement for the existing working UI. The browser still directly performs privileged database operations; the new administrator Auth identities and private mapping are not enrolled. Do not merge PR #2 until the entire auth/CRUD migration, RLS permission review, migration rollback plan and real deployment validation are approved. The existing QUICK ADMIN, ZAPGO-V6 and DUO receiver have not been modified.
+
+The user elected not to create a paid Supabase test branch. Disposable CI PostgreSQL tests are useful but do **not** reproduce Supabase Auth, PostgREST routing, live RLS exposure, or the existing operational data.
+
+## V2.17 — restricted organization/admin/settings APIs (GitHub branch only)
+
+**No Supabase paid branch, production DB write, RLS change, or Edge deployment.**
+
+- `config-core.mjs` / `config-core.test.mjs`: POST-only dev administrator configuration gate. Requires a newly verified Supabase Auth bearer plus an enabled private admin identity mapping. Only `branch.rename`, `admin.rename`, and `setting.toggle` are accepted. No password/role/auth-UUID/organization-parent updates, deletes, arbitrary configuration keys, or dangerous HTML markup. Each update requires an expected old value and a unique idempotency key.
+- `config-index.ts`: undeployed Edge adapter calling only `qa_svc_admin_profile` and `qa_svc_admin_config` with the server-held service credential.
+- `SQL_CONFIG_REVIEW_ONLY.sql`: transactional draft RPC. Row locks, compare-and-swap old values, in-transaction audit record, idempotency replays, and explicit deny to PUBLIC/anon/authenticated.
+- `secure-config-client.mjs` and its test: isolated browser adapter that sends only verified-token requests to a fixed endpoint; no direct table access.
+- `read-core.mjs`, `SQL_READ_REVIEW_ONLY.sql`, and the browser adapter now also cover `admin_directory` and `setting_flags`. **Only dev** can read these. Admin listing excludes `password`; settings listing exposes only the two boolean keys `maintenance_mode` and `payment_visible`, not `tg_bot_token` or payment accounts.
+- `sql-config-local-test.sql` now includes disposable PostgreSQL tests for the read/write SQL, stale updates, role restrictions, replay, and nonsecret response fields. This is not proof of real Supabase Auth/PostgREST behavior.
+
+**Deployment blocker remains:** existing legacy QUICK ADMIN still authenticates through public.admins and makes privileged direct browser DB calls. Do not merge until new Auth re-enrollment, full screen migration, audited role-scoped SQL, RLS/grant changes, integration testing and rollback are complete.
+
+### GitHub default-branch hygiene
+
+A static test source file was briefly created on `main` by mistake, then immediately deleted and added to this development branch. A GitHub compare against the original `main` baseline commit showed an empty final file diff (two add/revert commits remain in history). No default-branch application file, operational database or deployed API was intentionally changed.
