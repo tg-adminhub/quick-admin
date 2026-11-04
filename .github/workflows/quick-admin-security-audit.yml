@@ -49,6 +49,8 @@ jobs:
         run: node --test security/duo-order-client/order-model.test.mjs
       - name: Test authenticated DUO order SSE transport and disconnect handling
         run: node --test security/duo-order-client/sse-client.test.mjs
+      - name: Test existing ZAPGO V6 authenticated session receive to DUO WebView
+        run: node --test security/duo-order-client/v6-existing-session-bridge.test.mjs
       - name: Check exposed client DB call baseline
         run: node security/audit-client.mjs --guardrails
 
