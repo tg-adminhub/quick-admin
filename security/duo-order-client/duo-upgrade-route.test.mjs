@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import {parseDuoUpgrade} from './duo-upgrade-route.mjs';
 const token='abc.def.ghi';
 const sourceForPort=p=>({12000:'인성1',12200:'인성2'})[p];
-const build=args=>build({...args,sourceForPort});
+const build=args=>parseDuoUpgrade({...args,sourceForPort});
 test('DUO-only secure route accepts two supported Insung ports and bearer authorization',()=>{
   for(const [port,source] of [['12000','인성1'],['12200','인성2']]){
     const request=build({url:'/duo/driver-ws?port='+port,authorization:'Bearer '+token,secureTransport:true});
